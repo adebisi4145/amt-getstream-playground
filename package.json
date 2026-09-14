@@ -1,0 +1,18 @@
+{
+  "name": "amt-getstream-playground",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "lint": "npm run lint --workspace=apps/web",
+    "dev:api": "dotnet watch --project apps/api/src/Amt.GetStream.Api",
+    "build:api": "dotnet build apps/api/Amt.GetStream.Playground.slnx"
+  }
+}

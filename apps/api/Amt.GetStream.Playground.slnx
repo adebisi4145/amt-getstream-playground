@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Amt.GetStream.Api/Amt.GetStream.Api.csproj" />
+  </Folder>
+</Solution>
