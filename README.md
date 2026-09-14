@@ -40,7 +40,7 @@ A monorepo for experimenting with [GetStream](https://getstream.io/). It has a R
 ## Getting started
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/adebisi4145/amt-getstream-playground.git
 cd amt-getstream-playground
 
 npm install
