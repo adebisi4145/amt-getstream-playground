@@ -1,6 +1,6 @@
 # amt-getstream-playground
 
-A monorepo for experimenting with [GetStream](https://getstream.io/). It has a React web client and an ASP.NET Core API.
+A monorepo for experimenting with [GetStream](https://getstream.io/). It has a Next.js web client and an ASP.NET Core API.
 
 > **Status:** early scaffold. Both apps are still close to their starter templates.
 
@@ -9,7 +9,7 @@ A monorepo for experimenting with [GetStream](https://getstream.io/). It has a R
 ```
 .
 ├── apps/                   # Runnable applications
-│   ├── web/                # React 19 + TypeScript + Vite client (npm workspace)
+│   ├── web/                # Next.js 16 (App Router) client (npm workspace)
 │   └── api/                # ASP.NET Core (.NET 10) minimal API
 │       ├── Amt.GetStream.Playground.slnx
 │       └── src/Amt.GetStream.Api/
@@ -21,7 +21,7 @@ A monorepo for experimenting with [GetStream](https://getstream.io/). It has a R
 
 | Path | Stack | Tooling |
 | --- | --- | --- |
-| `apps/web` | React 19, TypeScript 6, Vite 8 | npm workspaces, ESLint |
+| `apps/web` | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4 | npm workspaces, ESLint |
 | `apps/api` | ASP.NET Core, .NET 10 | `dotnet` CLI, `.slnx` solution |
 
 ### Conventions
@@ -50,7 +50,7 @@ dotnet restore apps/api/Amt.GetStream.Playground.slnx
 Then start each app in its own terminal:
 
 ```bash
-npm run dev       # web → http://localhost:5173
+npm run dev       # web → http://localhost:3000
 npm run dev:api   # api → http://localhost:5056
 ```
 
@@ -62,8 +62,8 @@ Run these from the repo root:
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Start the Vite dev server for `apps/web` |
-| `npm run build` | Type-check and build `apps/web` to `apps/web/dist` |
+| `npm run dev` | Start the Next.js dev server for `apps/web` |
+| `npm run build` | Create a production build of `apps/web` (output in `apps/web/.next`) |
 | `npm run lint` | Run ESLint on `apps/web` |
 | `npm run dev:api` | Run the API with hot reload (`dotnet watch`) |
 | `npm run build:api` | Build the API solution |
