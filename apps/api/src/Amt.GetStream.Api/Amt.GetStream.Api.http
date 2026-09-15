@@ -1,6 +1,30 @@
 @Amt.GetStream.Api_HostAddress = http://localhost:5056
 
-GET {{Amt.GetStream.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Issue a Stream user token (creates the user if missing; only sent fields are updated)
+POST {{Amt.GetStream.Api_HostAddress}}/api/tokens
+Content-Type: application/json
+
+{
+  "userId": "alice",
+  "name": "Alice",
+  "image": "https://getstream.io/random_png/?name=Alice"
+}
+
+### Refresh a token (userId only; leaves the existing user unchanged)
+POST {{Amt.GetStream.Api_HostAddress}}/api/tokens
+Content-Type: application/json
+
+{
+  "userId": "alice"
+}
+
+### Invalid request: returns 400 ValidationProblem
+POST {{Amt.GetStream.Api_HostAddress}}/api/tokens
+Content-Type: application/json
+
+{
+  "userId": "bad id!",
+  "image": "ftp://example.com/alice.png"
+}
 
 ###

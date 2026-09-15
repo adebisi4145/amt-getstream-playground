@@ -1,41 +1,44 @@
+using Amt.GetStream.Api.Features.Tokens;
+using Amt.GetStream.Api.Services.Stream;
+using Microsoft.AspNetCore.Cors.Infrastructure;
+using Scalar.AspNetCore;
+
+const string WebCorsPolicy = "Web";
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<StreamExceptionHandler>();
+builder.Services.AddValidation();
+builder.Services.AddStream(builder.Configuration);
+
+// Origins are read when the options are first used, so configuration added by tests is included.
+builder.Services.AddCors();
+builder.Services
+    .AddOptions<CorsOptions>()
+    .Configure<IConfiguration>((options, configuration) =>
+    {
+        var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+        options.AddPolicy(WebCorsPolicy, policy => policy
+            .WithOrigins(origins)
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+    });
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.UseExceptionHandler();
+app.UseHttpsRedirection();
+app.UseCors();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
-app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+var api = app.MapGroup("/api").RequireCors(WebCorsPolicy);
+api.MapTokenEndpoints(app.Configuration);
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

@@ -13,6 +13,8 @@
     "build": "npm run build --workspace=apps/web",
     "lint": "npm run lint --workspace=apps/web",
     "dev:api": "dotnet watch --project apps/api/src/Amt.GetStream.Api",
-    "build:api": "dotnet build apps/api/Amt.GetStream.Playground.slnx"
+    "build:api": "dotnet build apps/api/Amt.GetStream.Playground.slnx",
+    "test:api": "dotnet test --solution apps/api/Amt.GetStream.Playground.slnx",
+    "test:api:integration": "dotnet test --solution apps/api/Amt.GetStream.Playground.slnx --filter-trait \"Category=Integration\""
   }
 }

@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Amt.GetStream.Api/Amt.GetStream.Api.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Amt.GetStream.Api.Tests/Amt.GetStream.Api.Tests.csproj" />
+  </Folder>
 </Solution>
