@@ -25,7 +25,7 @@ A monorepo for experimenting with [GetStream](https://getstream.io/). It has a N
 | Path | Stack | Tooling |
 | --- | --- | --- |
 | `apps/web` | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4 | npm workspaces, ESLint |
-| `apps/api` | ASP.NET Core, .NET 10 | `dotnet` CLI, `.slnx` solution |
+| `apps/api` | ASP.NET Core minimal APIs (.NET 10), `getstream-net` 16.0.1, Scalar API reference | `dotnet` CLI, `.slnx` solution, xUnit v3 on Microsoft.Testing.Platform |
 
 ### Conventions
 
