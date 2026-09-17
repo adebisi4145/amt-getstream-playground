@@ -17,7 +17,8 @@ internal static class ApiFactory
 
     public static WebApplicationFactory<Program> Create(
         IStreamUserService? userService = null,
-        IDictionary<string, string?>? settings = null)
+        IDictionary<string, string?>? settings = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         var configuration = new Dictionary<string, string?>
         {
@@ -35,10 +36,15 @@ internal static class ApiFactory
             builder.UseEnvironment("Development");
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(configuration));
 
-            if (userService is not null)
+            builder.ConfigureTestServices(services =>
             {
-                builder.ConfigureTestServices(services => services.AddSingleton(userService));
-            }
+                if (userService is not null)
+                {
+                    services.AddSingleton(userService);
+                }
+
+                configureServices?.Invoke(services);
+            });
         });
     }
 }

@@ -28,7 +28,12 @@ public static class StreamServiceExtensions
             });
         });
 
+        services.AddSingleton(serviceProvider => new VideoClient(serviceProvider.GetRequiredService<StreamClient>()));
+
         services.AddSingleton<IStreamUserService, StreamUserService>();
+        services.AddSingleton<IStreamCallService, StreamCallService>();
+        services.AddSingleton<IStreamRecordingService, StreamRecordingService>();
+        services.AddSingleton<IStreamWebhookVerifier, StreamWebhookVerifier>();
 
         return services;
     }

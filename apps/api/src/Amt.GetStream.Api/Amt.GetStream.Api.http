@@ -1,11 +1,14 @@
 @Amt.GetStream.Api_HostAddress = http://localhost:5056
+@userId = alice
+@callType = development
+@callId = team-standup
 
 ### Issue a Stream user token (creates the user if missing; only sent fields are updated)
 POST {{Amt.GetStream.Api_HostAddress}}/api/tokens
 Content-Type: application/json
 
 {
-  "userId": "alice",
+  "userId": "{{userId}}",
   "name": "Alice",
   "image": "https://getstream.io/random_png/?name=Alice"
 }
@@ -15,7 +18,7 @@ POST {{Amt.GetStream.Api_HostAddress}}/api/tokens
 Content-Type: application/json
 
 {
-  "userId": "alice"
+  "userId": "{{userId}}"
 }
 
 ### Invalid request: returns 400 ValidationProblem
@@ -25,6 +28,56 @@ Content-Type: application/json
 {
   "userId": "bad id!",
   "image": "ftp://example.com/alice.png"
+}
+
+### Create a call (the server creates calls; the browser joins them)
+POST {{Amt.GetStream.Api_HostAddress}}/api/calls
+Content-Type: application/json
+
+{
+  "type": "{{callType}}",
+  "id": "{{callId}}",
+  "createdById": "{{userId}}",
+  "members": [
+    { "userId": "bob", "role": "host" }
+  ]
+}
+
+### Get one call
+GET {{Amt.GetStream.Api_HostAddress}}/api/calls/{{callType}}/{{callId}}
+
+### List calls
+GET {{Amt.GetStream.Api_HostAddress}}/api/calls?type={{callType}}&limit=10
+
+### Add and remove members
+POST {{Amt.GetStream.Api_HostAddress}}/api/calls/{{callType}}/{{callId}}/members
+Content-Type: application/json
+
+{
+  "add": [ { "userId": "carol" } ],
+  "remove": [ "bob" ]
+}
+
+### Start recording (409 until someone has joined the call)
+POST {{Amt.GetStream.Api_HostAddress}}/api/calls/{{callType}}/{{callId}}/recordings/start
+
+### Stop recording
+POST {{Amt.GetStream.Api_HostAddress}}/api/calls/{{callType}}/{{callId}}/recordings/stop
+
+### List recordings (appear once Stream finishes processing)
+GET {{Amt.GetStream.Api_HostAddress}}/api/calls/{{callType}}/{{callId}}/recordings
+
+### End the call for everyone
+POST {{Amt.GetStream.Api_HostAddress}}/api/calls/{{callType}}/{{callId}}/end
+
+### Webhook with an invalid signature: returns 401 (Stream signs real ones)
+POST {{Amt.GetStream.Api_HostAddress}}/api/webhooks/stream
+Content-Type: application/json
+X-Signature: not-a-valid-signature
+
+{
+  "type": "call.ended",
+  "call_cid": "{{callType}}:{{callId}}"
 }
 
 ###

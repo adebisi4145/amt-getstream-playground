@@ -2,9 +2,6 @@ using System.Text.Json;
 using Amt.GetStream.Api.Services.Stream;
 using GetStream;
 using GetStream.Models;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Amt.GetStream.Api.Tests.Integration;
@@ -19,33 +16,16 @@ namespace Amt.GetStream.Api.Tests.Integration;
 [Trait("Category", "Integration")]
 public sealed class StreamUserServiceIntegrationTests : IAsyncLifetime
 {
-    private static readonly IConfiguration LocalConfiguration = new ConfigurationBuilder()
-        .AddUserSecrets<Program>(optional: true)
-        .AddEnvironmentVariables()
-        .Build();
-
     private readonly string _userId = $"it-{Guid.NewGuid():N}";
-    private WebApplicationFactory<Program>? _factory;
+    private StreamIntegrationHost? _host;
 
-    private IStreamUserService Users => _factory!.Services.GetRequiredService<IStreamUserService>();
+    private IStreamUserService Users => _host!.Services.GetRequiredService<IStreamUserService>();
 
-    private StreamClient Stream => _factory!.Services.GetRequiredService<StreamClient>();
+    private StreamClient Stream => _host!.Services.GetRequiredService<StreamClient>();
 
     public ValueTask InitializeAsync()
     {
-        var secret = LocalConfiguration["Stream:ApiSecret"];
-        if (string.IsNullOrEmpty(secret))
-        {
-            return ValueTask.CompletedTask;
-        }
-
-        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-        {
-            builder.UseEnvironment("Development");
-            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
-                LocalConfiguration.AsEnumerable().Where(pair => pair.Key.StartsWith("Stream:", StringComparison.Ordinal))));
-        });
-
+        _host = StreamIntegrationHost.TryCreate();
         return ValueTask.CompletedTask;
     }
 
@@ -95,7 +75,7 @@ public sealed class StreamUserServiceIntegrationTests : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
-        if (_factory is null)
+        if (_host is null)
         {
             return;
         }
@@ -113,12 +93,12 @@ public sealed class StreamUserServiceIntegrationTests : IAsyncLifetime
         }
         finally
         {
-            await _factory.DisposeAsync();
+            await _host.DisposeAsync();
         }
     }
 
     private void SkipWithoutSecret() =>
-        Assert.SkipWhen(_factory is null, "Set Stream:ApiSecret (user secrets) or Stream__ApiSecret to run Stream integration tests.");
+        Assert.SkipWhen(_host is null, StreamIntegrationHost.SkipReason);
 
     /// <summary>Arrange directly with the SDK: role and custom data as if set in the dashboard.</summary>
     private async Task CreateUserAsync(string name, string image)

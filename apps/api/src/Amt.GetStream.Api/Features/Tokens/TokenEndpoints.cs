@@ -29,6 +29,7 @@ public static class TokenEndpoints
                 "Ensures the user exists in Stream (setting only the fields sent) and returns the Stream API key " +
                 "and a user token. The Stream API secret is never returned. Development only: the userId is trusted as sent.")
             .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status502BadGateway);
 
         return api;
