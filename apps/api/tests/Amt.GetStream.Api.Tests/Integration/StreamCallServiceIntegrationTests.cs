@@ -11,6 +11,7 @@ namespace Amt.GetStream.Api.Tests.Integration;
 /// is configured. Uses a unique it-&lt;guid&gt; call id and deletes everything it made.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(StreamIntegrationCollection.Name)]
 public sealed class StreamCallServiceIntegrationTests : IAsyncLifetime
 {
     private const string CallType = "development";

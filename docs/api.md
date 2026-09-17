@@ -93,6 +93,44 @@ devtunnel host -p 5056 --allow-anonymous   # or: ngrok http 5056
 # webhook URL: https://<public-host>/api/webhooks/stream
 ```
 
+## Consultations (patient → triage → doctor)
+
+The workflow this playground exists for: a patient taps **Call now**, a triage agent picks it up from a board, and triage can pull a doctor into the live call.
+
+**A consultation is a Stream call** whose custom data carries the queue state: `kind`, `status`, `patientId`, `reason`, `assignedTo`, `requestedAt`, `acceptedAt`. There's no database.
+
+| Step | Endpoint | What happens |
+| --- | --- | --- |
+| Patient calls | `POST /api/consultations` | Creates the call with `status: waiting` and the patient as its only member. The patient's browser joins and waits. |
+| Dispatch board | `GET /api/consultations?status=waiting` | Triage sees who's waiting, with the reason and when they asked. |
+| Triage picks up | `POST /api/consultations/{callId}/accept` | Adds the agent to the call, `status: accepted`. Their browser joins. |
+| Bring in a doctor | `POST /api/consultations/{callId}/invite` | Adds the doctor as a member, then rings them. Triage stays with the patient. |
+| Ring again | `POST /api/consultations/{callId}/ring` | Rings an already-invited doctor again, for when the first ring wasn't answered. |
+| Finish | `POST /api/consultations/{callId}/complete` | `status: completed`, call ended. |
+| Patient gives up | `POST /api/consultations/{callId}/cancel` | `status: cancelled`, call ended. |
+
+**States.** `waiting → accepted → completed`, or `waiting → cancelled`. Anything else returns `409` and changes nothing: accepting a consultation someone already took, inviting a doctor before triage accepted, completing one that's still waiting, cancelling one that's already been accepted.
+
+**`status` is authoritative, not `ended_at`.** Both a completed and a cancelled consultation have an ended Stream call, so only `status` distinguishes "the consultation happened" from "the patient gave up".
+
+**Who may do what** (ids come from the request body; see the caveat below):
+
+| Rule | Why |
+| --- | --- |
+| Only **triage** can accept | Doctors join by invite, not from the board. Patients can't accept at all. |
+| Only a configured **doctor** can be invited | Invitations are for clinicians. |
+| `/ring` only rings a doctor **already invited to that consultation** | Otherwise it becomes a way to ring any doctor about a call they aren't part of. |
+| Only **staff on that consultation** can complete it | Triage often leaves after handing over, so the doctor must be able to close it. |
+| Only the **owning patient** can cancel | One patient must not be able to cancel another's consultation. |
+
+Anything else returns `403`.
+
+**Two limits worth knowing**
+- **Identity is faked.** Staff are a list in configuration (`Consultations:Staff`), and the API believes whatever id the request sends. The rules are real; the identity is not. Real authentication has to come before this shape is used for anything.
+- **Accept has a race.** Checking the status and writing it are two calls to Stream, and Stream has no compare-and-set, so two agents accepting in the same instant can both succeed, with the second overwriting `assignedTo`. The `409` covers the everyday case ("someone already took it"), not the millisecond one. In the product, a database row or a lock closes it.
+
+**Recordings are deliberately not part of this.** A recorded consultation is patient data with consent and retention rules attached, and that deserves its own decision.
+
 ## Error responses
 
 Every error is ProblemDetails (RFC 9457). Stream's own error text is never returned; it goes to our logs.
@@ -100,7 +138,8 @@ Every error is ProblemDetails (RFC 9457). Stream's own error text is never retur
 | Status | Meaning | What the web app should do |
 | --- | --- | --- |
 | `400` | Our validation rejected the request | Fix the request. Field errors are in `errors`. |
-| `404` | The call doesn't exist | Create it, or check the id. |
+| `403` | The caller isn't allowed to do this | A permission rule, not a malformed request. See the consultation rules above. |
+| `404` | The call or consultation doesn't exist | Create it, or check the id. |
 | `409` | Stream rejected it for the current state of the call or user | Fix the situation, for example join the call before recording. |
 | `429` | Stream is rate limiting this app | Back off and retry. |
 | `502` | Stream is unreachable or failing | Retry later; nothing the caller can fix. |
@@ -121,6 +160,8 @@ These were checked against the SDK source at the 16.0.1 release commit (`9ce65bd
 - **Recording.** `StartRecordingAsync(type, id, recordingType, request)` takes the recording type as a path segment. The SDK doesn't enumerate valid values and Stream doesn't publish them; `composite` was accepted (the call was refused for having no active session, not for the type).
 - **Webhooks.** `StreamClient.VerifyAndParseWebhook(body, signature)` gunzips, verifies the HMAC and parses, throwing `Webhook.StreamInvalidWebhookException` for every failure mode. Event type constants live on `WebhookEventType`.
 - **Validation gap worth remembering.** .NET's minimal API validation does not recurse into arrays of nested objects, so ids inside `members` are validated explicitly in the endpoints. Without that, an invalid id reached Stream.
+- **Custom data (checked live on 2026-09-17).** Calls can be filtered by custom fields (`{"custom.status":"waiting"}`), which is what makes the consultation board possible without a database. Writing `custom` **merges** rather than replacing, so a status change leaves the patient's reason intact — the opposite of what we assumed before testing it.
+- **Responses don't all carry members.** The update-call response has no member list, so the consultation service re-reads the call after assigning or adding a doctor. An integration test caught this.
 - **Tokens.** `CreateUserToken(userId, lifetime)` sets `user_id`, `iat` and `nbf` (5 seconds in the past) and `exp` from the system clock. `expiresAt` is read back from the token's `exp` claim, so it always matches.
 - **HTTP.** Each `StreamClient` builds its own connection pool, so the API registers a single instance.
 - **Deleting users** is a background task. `DeleteUsersAsync` returns a task id to wait on with `WaitForTaskAsync`. The integration tests use `User = "hard"`.

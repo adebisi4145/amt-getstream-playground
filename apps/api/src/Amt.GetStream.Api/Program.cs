@@ -1,4 +1,5 @@
 using Amt.GetStream.Api.Features.Calls;
+using Amt.GetStream.Api.Features.Consultations;
 using Amt.GetStream.Api.Features.Tokens;
 using Amt.GetStream.Api.Features.Webhooks;
 using Amt.GetStream.Api.Services.Stream;
@@ -20,6 +21,13 @@ builder.Services
     .AddOptions<CallOptions>()
     .Configure<IConfiguration>((options, configuration) =>
         configuration.GetSection(CallOptions.SectionName).Bind(options))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services
+    .AddOptions<ConsultationOptions>()
+    .Configure<IConfiguration>((options, configuration) =>
+        configuration.GetSection(ConsultationOptions.SectionName).Bind(options))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
@@ -52,6 +60,7 @@ var api = app.MapGroup("/api").RequireCors(WebCorsPolicy);
 api.MapTokenEndpoints(app.Configuration);
 api.MapCallEndpoints();
 api.MapRecordingEndpoints();
+api.MapConsultationEndpoints();
 
 // Stream posts webhooks server-to-server, so this route stays outside the CORS policy.
 app.MapWebhookEndpoints();

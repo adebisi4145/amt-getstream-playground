@@ -1,4 +1,5 @@
 using GetStream;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using SdkStreamOptions = GetStream.StreamOptions;
 
@@ -34,6 +35,8 @@ public static class StreamServiceExtensions
         services.AddSingleton<IStreamCallService, StreamCallService>();
         services.AddSingleton<IStreamRecordingService, StreamRecordingService>();
         services.AddSingleton<IStreamWebhookVerifier, StreamWebhookVerifier>();
+        services.AddSingleton<IStreamConsultationService, StreamConsultationService>();
+        services.TryAddSingleton(TimeProvider.System);
 
         return services;
     }

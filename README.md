@@ -2,7 +2,7 @@
 
 A monorepo for experimenting with [GetStream](https://getstream.io/). It has a Next.js web client and an ASP.NET Core API.
 
-> **Status:** early. The API issues Stream Video user tokens and manages calls, recordings and webhooks (see [docs/api.md](docs/api.md)). The web app is still the starter template.
+> **Status:** early. The API issues Stream Video user tokens, manages calls, recordings and webhooks, and runs a consultation queue (patient → triage → doctor). See [docs/api.md](docs/api.md). The web app is still the starter template.
 
 ## Repository layout
 
@@ -73,6 +73,8 @@ The API reads Stream settings from the `Stream` configuration section.
 | `Cors:AllowedOrigins` | `http://localhost:3000` in Development, empty otherwise. |
 | `Tokens:AllowUntrustedRequests` | `true` in Development only. It turns on `POST /api/tokens`, which trusts the `userId` it's sent. |
 | `Calls:AllowedTypes` | Call types the API accepts. Defaults to Stream's built-ins (`default`, `audio_room`, `livestream`, `development`). Add custom dashboard call types here. |
+| `Consultations:CallType` | Call type used for consultations. Must also be in `Calls:AllowedTypes`. |
+| `Consultations:Staff` | Demo triage agents and doctors (`userId` + `role`). Identity is faked: the API trusts the id in the request, so this proves the rules work, not who anyone is. |
 
 **Webhooks:** Stream can't reach `localhost`, so to receive events locally expose the API with a tunnel (`devtunnel host -p 5056 --allow-anonymous` or `ngrok http 5056`) and set `https://<public-host>/api/webhooks/stream` as the webhook URL in the Stream dashboard. See [docs/api.md](docs/api.md).
 

@@ -14,6 +14,7 @@ namespace Amt.GetStream.Api.Tests.Integration;
 ///   dotnet test apps/api/Amt.GetStream.Playground.slnx --filter-trait "Category=Integration"
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(StreamIntegrationCollection.Name)]
 public sealed class StreamUserServiceIntegrationTests : IAsyncLifetime
 {
     private readonly string _userId = $"it-{Guid.NewGuid():N}";
@@ -90,6 +91,11 @@ public sealed class StreamUserServiceIntegrationTests : IAsyncLifetime
 
             // Deletion runs as a Stream background task.
             await Stream.WaitForTaskAsync(response.Data!.TaskID, timeout: TimeSpan.FromSeconds(60));
+        }
+        catch (GetStreamException)
+        {
+            // Cleanup is best-effort: a rate limit or an already-deleted user must not fail the test
+            // that just passed. Leftover it-* users are listed in the README.
         }
         finally
         {

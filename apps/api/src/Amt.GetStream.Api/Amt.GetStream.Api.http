@@ -70,6 +70,60 @@ GET {{Amt.GetStream.Api_HostAddress}}/api/calls/{{callType}}/{{callId}}/recordin
 ### End the call for everyone
 POST {{Amt.GetStream.Api_HostAddress}}/api/calls/{{callType}}/{{callId}}/end
 
+### Consultation: patient taps "Call now" (copy the callId from the response)
+POST {{Amt.GetStream.Api_HostAddress}}/api/consultations
+Content-Type: application/json
+
+{
+  "patientId": "patient-001",
+  "reason": "sore throat for three days"
+}
+
+### Dispatch board: who is waiting
+GET {{Amt.GetStream.Api_HostAddress}}/api/consultations?status=waiting
+
+@consultationId = replace-with-callId-from-the-create-response
+
+### Triage picks it up (triage only; patients and doctors get 403)
+POST {{Amt.GetStream.Api_HostAddress}}/api/consultations/{{consultationId}}/accept
+Content-Type: application/json
+
+{
+  "staffId": "triage-001"
+}
+
+### Bring a doctor into the live call (adds them, then rings them)
+POST {{Amt.GetStream.Api_HostAddress}}/api/consultations/{{consultationId}}/invite
+Content-Type: application/json
+
+{
+  "doctorId": "doctor-001"
+}
+
+### Ring that doctor again
+POST {{Amt.GetStream.Api_HostAddress}}/api/consultations/{{consultationId}}/ring
+Content-Type: application/json
+
+{
+  "doctorId": "doctor-001"
+}
+
+### Finish the consultation
+POST {{Amt.GetStream.Api_HostAddress}}/api/consultations/{{consultationId}}/complete
+Content-Type: application/json
+
+{
+  "staffId": "triage-001"
+}
+
+### Patient gives up while waiting (only from waiting, only the owning patient)
+POST {{Amt.GetStream.Api_HostAddress}}/api/consultations/{{consultationId}}/cancel
+Content-Type: application/json
+
+{
+  "patientId": "patient-001"
+}
+
 ### Webhook with an invalid signature: returns 401 (Stream signs real ones)
 POST {{Amt.GetStream.Api_HostAddress}}/api/webhooks/stream
 Content-Type: application/json
