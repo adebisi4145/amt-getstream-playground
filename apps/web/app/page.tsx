@@ -1,69 +1,63 @@
-import Image from "next/image";
+import Link from "next/link";
+import { DOCTORS, TRIAGE_AGENTS } from "@/lib/demo-users";
+
+const ROLES = [
+  {
+    href: "/patient",
+    title: "Patient",
+    description: "Tap “Speak to a doctor now”, pick audio or video, and wait for triage to pick up.",
+  },
+  {
+    href: "/triage",
+    title: "Triage",
+    description: "See who is waiting, take a consultation, then bring a doctor into the call.",
+  },
+  {
+    href: "/doctor",
+    title: "Doctor",
+    description: "Stay available and answer when triage rings you into a consultation.",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 p-8">
+      <header className="flex flex-col gap-2">
+        <h1 className="font-display text-3xl font-semibold text-amt-black">AMT consultation demo</h1>
+        <p className="text-amt-black-400">
+          A playground for Stream Video. Open each role in its own browser profile or window to see the
+          whole flow: patient → triage → doctor.
+        </p>
+      </header>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {ROLES.map((role) => (
+          <Link
+            key={role.href}
+            href={role.href}
+            className="flex flex-col gap-2 rounded-xl border border-amt-grey p-5 transition-colors hover:border-amt-blue hover:bg-amt-blue-50"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            <span className="font-display text-xl font-medium text-amt-black">{role.title}</span>
+            <span className="text-sm text-amt-black-400">{role.description}</span>
+          </Link>
+        ))}
+      </div>
+
+      <section className="rounded-xl bg-amt-grey-100 p-5 text-sm text-amt-black-400">
+        <h2 className="mb-2 font-semibold text-amt-black">Demo identities</h2>
+        <p className="mb-3">
+          There is no login. The API trusts the id it is sent, so these are stand-ins for real
+          authentication. Staff ids must match the API’s configuration.
+        </p>
+        <ul className="grid gap-1 sm:grid-cols-2">
+          {[...TRIAGE_AGENTS, ...DOCTORS].map((user) => (
+            <li key={user.id}>
+              <span className="font-medium text-amt-black">{user.name}</span> — {user.id} ({user.role})
+            </li>
+          ))}
+          <li>Patients get a generated id per browser profile.</li>
+        </ul>
+      </section>
+    </main>
   );
 }
