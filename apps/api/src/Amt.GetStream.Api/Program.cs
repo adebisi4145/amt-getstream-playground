@@ -31,6 +31,9 @@ builder.Services
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// Closes consultations nobody finished, so the board reflects reality.
+builder.Services.AddHostedService<StaleConsultationSweeper>();
+
 // Origins are read when the options are first used, so configuration added by tests is included.
 builder.Services.AddCors();
 builder.Services

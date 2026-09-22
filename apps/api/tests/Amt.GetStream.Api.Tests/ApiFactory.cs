@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace Amt.GetStream.Api.Tests;
 
@@ -38,6 +40,10 @@ internal static class ApiFactory
 
             builder.ConfigureTestServices(services =>
             {
+                // No background jobs in tests: the stale-consultation sweeper would otherwise run
+                // against the fakes and change data underneath the assertions.
+                services.RemoveAll<IHostedService>();
+
                 if (userService is not null)
                 {
                     services.AddSingleton(userService);

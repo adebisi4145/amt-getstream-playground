@@ -18,6 +18,13 @@ public sealed class ConsultationOptions
     /// so this only proves the rules work, not who anyone is. Real authentication replaces it.
     /// </summary>
     public StaffMember[] Staff { get; set; } = [];
+
+    /// <summary>
+    /// How long an untouched consultation stays open before the sweeper closes it as abandoned.
+    /// Long enough to survive a patient reconnecting, short enough that yesterday's never reappears.
+    /// </summary>
+    [Range(typeof(TimeSpan), "00:01:00", "24:00:00")]
+    public TimeSpan StaleAfter { get; set; } = TimeSpan.FromMinutes(10);
 }
 
 public sealed class StaffMember
