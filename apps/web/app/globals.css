@@ -2,25 +2,44 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #212221;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* AMT design tokens (Figma: HbR89xTbi1tRVOrDYueq5d).
+     Prefixed so they sit alongside Tailwind's palette instead of replacing it. */
+  --color-amt-blue: #2052aa;
+  --color-amt-blue-400: #4d75bb;
+  --color-amt-blue-100: #bac9e5;
+  --color-amt-blue-50: #e9eef7;
+  --color-amt-black: #212221;
+  --color-amt-black-400: #4d4e4d;
+  --color-amt-black-300: #6a6b6a;
+  --color-amt-grey: #d7d7d7;
+  --color-amt-grey-100: #f9f9f9;
+  --color-amt-error: #d42620;
+  --color-amt-success: #3fac64;
+
+  /* Work Sans for body and labels, Geist for headings and avatar initials. */
+  --font-sans: var(--font-work-sans);
+  --font-display: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-work-sans), system-ui, sans-serif;
+}
+
+/* The call screen is dark on a gradient; keep it readable regardless of system theme. */
+.amt-call-gradient {
+  background: linear-gradient(to bottom, #e6f4f0, #008e65);
+}
+
+.amt-pip-gradient {
+  background: linear-gradient(to bottom, #b1c5e8, #13336b);
 }
