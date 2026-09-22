@@ -12,7 +12,10 @@ internal sealed class StreamConsultationService(VideoClient video, TimeProvider 
     private const string KindField = "kind";
     private const string StatusField = "status";
     private const string PatientField = "patientId";
+    private const string PatientNameField = "patientName";
+    private const string ModalityField = "modality";
     private const string ReasonField = "reason";
+    private const string EndReasonField = "endReason";
     private const string AssignedToField = "assignedTo";
     private const string RequestedAtField = "requestedAt";
     private const string AcceptedAtField = "acceptedAt";
@@ -21,6 +24,8 @@ internal sealed class StreamConsultationService(VideoClient video, TimeProvider 
         string callType,
         string callId,
         string patientId,
+        string? patientName,
+        string modality,
         string? reason,
         CancellationToken cancellationToken)
     {
@@ -29,8 +34,14 @@ internal sealed class StreamConsultationService(VideoClient video, TimeProvider 
             [KindField] = ConsultationKind,
             [StatusField] = ConsultationStatus.Waiting,
             [PatientField] = patientId,
+            [ModalityField] = modality,
             [RequestedAtField] = timeProvider.GetUtcNow().ToString("O"),
         };
+
+        if (patientName is not null)
+        {
+            custom[PatientNameField] = patientName;
+        }
 
         if (reason is not null)
         {
@@ -81,20 +92,33 @@ internal sealed class StreamConsultationService(VideoClient video, TimeProvider 
     public async Task<IReadOnlyList<Consultation>> QueryByStatusAsync(
         string callType,
         string status,
+        string? patientId,
         int limit,
         CancellationToken cancellationToken)
     {
+        var filter = new Dictionary<string, object>
+        {
+            ["type"] = callType,
+            [$"custom.{KindField}"] = ConsultationKind,
+            [$"custom.{StatusField}"] = status,
+        };
+
+        // Filtered in Stream rather than in the API, so one patient's browser never receives
+        // another patient's consultations.
+        if (patientId is not null)
+        {
+            filter[$"custom.{PatientField}"] = patientId;
+        }
+
         var response = await CallStreamAsync(
             nameof(QueryByStatusAsync),
             () => video.QueryCallsAsync(
                 new QueryCallsRequest
                 {
-                    FilterConditions = new Dictionary<string, object>
-                    {
-                        ["type"] = callType,
-                        [$"custom.{KindField}"] = ConsultationKind,
-                        [$"custom.{StatusField}"] = status,
-                    },
+                    FilterConditions = filter,
+                    // Newest first: the waiting board wants the longest wait visible, and history
+                    // is only useful in reverse order.
+                    Sort = [new SortParamRequest { Field = "created_at", Direction = -1 }],
                     Limit = limit,
                 },
                 cancellationToken));
@@ -169,17 +193,57 @@ internal sealed class StreamConsultationService(VideoClient video, TimeProvider 
                 new RingCallRequest { MembersIds = [doctorId] },
                 cancellationToken));
 
+    public async Task<bool> IsParticipantPresentAsync(
+        string callType,
+        string callId,
+        string userId,
+        CancellationToken cancellationToken)
+    {
+        var participants = await SessionParticipantsAsync(
+            nameof(IsParticipantPresentAsync), callType, callId, cancellationToken);
+
+        return participants.Any(participant => participant.User?.ID == userId);
+    }
+
+    public async Task<int> SessionParticipantCountAsync(
+        string callType,
+        string callId,
+        CancellationToken cancellationToken)
+    {
+        var participants = await SessionParticipantsAsync(
+            nameof(SessionParticipantCountAsync), callType, callId, cancellationToken);
+
+        return participants.Count;
+    }
+
+    private async Task<IReadOnlyList<CallParticipantResponse>> SessionParticipantsAsync(
+        string operation,
+        string callType,
+        string callId,
+        CancellationToken cancellationToken)
+    {
+        var response = await CallStreamAsync(
+            operation,
+            () => video.GetCallAsync(callType, callId, cancellationToken: cancellationToken));
+
+        return response.Data?.Call.Session?.Participants ?? [];
+    }
+
     public async Task<Consultation> CloseAsync(
         string callType,
         string callId,
         string status,
+        string? endReason,
         CancellationToken cancellationToken)
     {
-        await UpdateCustomAsync(
-            callType,
-            callId,
-            new Dictionary<string, object> { [StatusField] = status },
-            cancellationToken);
+        var fields = new Dictionary<string, object> { [StatusField] = status };
+
+        if (endReason is not null)
+        {
+            fields[EndReasonField] = endReason;
+        }
+
+        await UpdateCustomAsync(callType, callId, fields, cancellationToken);
 
         await CallStreamAsync(
             nameof(CloseAsync),
@@ -214,8 +278,11 @@ internal sealed class StreamConsultationService(VideoClient video, TimeProvider 
             call.ID,
             call.Cid,
             ReadString(call.Custom, PatientField) ?? string.Empty,
+            ReadString(call.Custom, PatientNameField),
+            ReadString(call.Custom, ModalityField) ?? ConsultationModality.Video,
             ReadString(call.Custom, ReasonField),
             ReadString(call.Custom, StatusField) ?? ConsultationStatus.Waiting,
+            ReadString(call.Custom, EndReasonField),
             ReadString(call.Custom, AssignedToField),
             ReadDate(call.Custom, RequestedAtField) ?? call.CreatedAt,
             ReadDate(call.Custom, AcceptedAtField),

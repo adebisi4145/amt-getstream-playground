@@ -14,7 +14,21 @@ internal sealed class FakeStreamConsultationService : IStreamConsultationService
 
     public List<(string CallId, string DoctorId)> Rung { get; } = [];
 
-    public List<(string CallId, string Status)> Closed { get; } = [];
+    public List<(string CallId, string Status, string? EndReason)> Closed { get; } = [];
+
+    /// <summary>Stands in for Stream's view of who is still in the session.</summary>
+    public bool PatientPresent { get; init; }
+
+    public Task<bool> IsParticipantPresentAsync(
+        string callType, string callId, string userId, CancellationToken cancellationToken) =>
+        Task.FromResult(PatientPresent);
+
+    /// <summary>How many people the fake reports as being in the call.</summary>
+    public int SessionParticipants { get; init; }
+
+    public Task<int> SessionParticipantCountAsync(
+        string callType, string callId, CancellationToken cancellationToken) =>
+        Task.FromResult(SessionParticipants);
 
     /// <summary>When set, RingAsync throws it, standing in for Stream refusing the ring.</summary>
     public Exception? RingFailure { get; init; }
@@ -24,17 +38,22 @@ internal sealed class FakeStreamConsultationService : IStreamConsultationService
         string status,
         string? assignedTo = null,
         string patientId = PatientId,
-        IEnumerable<string>? members = null)
+        IEnumerable<string>? members = null,
+        string modality = ConsultationModality.Video,
+        DateTimeOffset? requestedAt = null)
     {
         var consultation = new Consultation(
             "development",
             callId,
             $"development:{callId}",
             patientId,
+            "Daniel Okafor",
+            modality,
             "sore throat",
             status,
+            EndReason: null,
             assignedTo,
-            new DateTimeOffset(2030, 1, 2, 3, 4, 5, TimeSpan.Zero),
+            requestedAt ?? new DateTimeOffset(2030, 1, 2, 3, 4, 5, TimeSpan.Zero),
             assignedTo is null ? null : new DateTimeOffset(2030, 1, 2, 3, 5, 5, TimeSpan.Zero),
             EndedAt: null,
             [.. members ?? (assignedTo is null ? [patientId] : [patientId, assignedTo])]);
@@ -43,12 +62,23 @@ internal sealed class FakeStreamConsultationService : IStreamConsultationService
         return consultation;
     }
 
+    public List<(string CallId, string PatientId, string? PatientName, string Modality, string? Reason)> Created { get; } =
+        [];
+
     public Task<Consultation> CreateAsync(
-        string callType, string callId, string patientId, string? reason, CancellationToken cancellationToken)
+        string callType,
+        string callId,
+        string patientId,
+        string? patientName,
+        string modality,
+        string? reason,
+        CancellationToken cancellationToken)
     {
+        Created.Add((callId, patientId, patientName, modality, reason));
+
         var consultation = new Consultation(
-            callType, callId, $"{callType}:{callId}", patientId, reason,
-            ConsultationStatus.Waiting, AssignedTo: null,
+            callType, callId, $"{callType}:{callId}", patientId, patientName, modality, reason,
+            ConsultationStatus.Waiting, EndReason: null, AssignedTo: null,
             new DateTimeOffset(2030, 1, 2, 3, 4, 5, TimeSpan.Zero), AcceptedAt: null, EndedAt: null, [patientId]);
 
         _consultations[callId] = consultation;
@@ -58,11 +88,20 @@ internal sealed class FakeStreamConsultationService : IStreamConsultationService
     public Task<Consultation?> GetAsync(string callType, string callId, CancellationToken cancellationToken) =>
         Task.FromResult(_consultations.GetValueOrDefault(callId));
 
+    public List<(string Status, string? PatientId)> Queries { get; } = [];
+
     public Task<IReadOnlyList<Consultation>> QueryByStatusAsync(
-        string callType, string status, int limit, CancellationToken cancellationToken)
+        string callType, string status, string? patientId, int limit, CancellationToken cancellationToken)
     {
+        Queries.Add((status, patientId));
+
         IReadOnlyList<Consultation> found =
-            [.. _consultations.Values.Where(consultation => consultation.Status == status).Take(limit)];
+        [
+            .. _consultations.Values
+                .Where(consultation => consultation.Status == status)
+                .Where(consultation => patientId is null || consultation.PatientId == patientId)
+                .Take(limit),
+        ];
 
         return Task.FromResult(found);
     }
@@ -101,12 +140,18 @@ internal sealed class FakeStreamConsultationService : IStreamConsultationService
         return Task.CompletedTask;
     }
 
-    public Task<Consultation> CloseAsync(string callType, string callId, string status, CancellationToken cancellationToken)
+    public Task<Consultation> CloseAsync(
+        string callType,
+        string callId,
+        string status,
+        string? endReason,
+        CancellationToken cancellationToken)
     {
-        Closed.Add((callId, status));
+        Closed.Add((callId, status, endReason));
         var updated = _consultations[callId] with
         {
             Status = status,
+            EndReason = endReason,
             EndedAt = new DateTimeOffset(2030, 1, 2, 4, 0, 0, TimeSpan.Zero),
         };
 

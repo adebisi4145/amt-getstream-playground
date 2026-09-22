@@ -14,24 +14,75 @@ public sealed class ConsultationEndpointTests
     private const string Doctor = "doctor-001";
     private const string Patient = FakeStreamConsultationService.PatientId;
 
-    [Fact]
-    public async Task Patient_starts_a_consultation_and_it_waits()
+    [Theory]
+    [InlineData(ConsultationModality.Audio)]
+    [InlineData(ConsultationModality.Video)]
+    public async Task Patient_starts_a_consultation_and_it_waits(string modality)
     {
         var consultations = new FakeStreamConsultationService();
         using var client = CreateClient(consultations);
 
         var response = await client.PostAsJsonAsync(
             "/api/consultations",
-            new { patientId = Patient, reason = "sore throat" },
+            new { patientId = Patient, patientName = "Daniel Okafor", modality, reason = "sore throat" },
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // Modality and name must reach Stream: triage reads both off the board, and shows the
+        // name rather than the id.
+        var created = Assert.Single(consultations.Created);
+        Assert.Equal(Patient, created.PatientId);
+        Assert.Equal("Daniel Okafor", created.PatientName);
+        Assert.Equal(modality, created.Modality);
+
         var body = await response.Content.ReadFromJsonAsync<ConsultationResponse>(TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Equal(ConsultationStatus.Waiting, body.Status);
         Assert.Equal(Patient, body.PatientId);
+        Assert.Equal("Daniel Okafor", body.PatientName);
+        Assert.Equal(modality, body.Modality);
         Assert.Equal("sore throat", body.Reason);
         Assert.Null(body.AssignedTo);
+    }
+
+    [Theory]
+    [InlineData("""{ "patientId": "patient-001" }""")]
+    [InlineData("""{ "patientId": "patient-001", "modality": "" }""")]
+    [InlineData("""{ "patientId": "patient-001", "modality": "chat" }""")]
+    [InlineData("""{ "patientId": "patient-001", "modality": "Video" }""")]
+    public async Task Missing_or_unknown_modality_returns_400(string json)
+    {
+        var consultations = new FakeStreamConsultationService();
+        using var client = CreateClient(consultations);
+
+        var response = await client.PostAsync(
+            "/api/consultations",
+            new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(consultations.Created);
+    }
+
+    [Fact]
+    public async Task Board_can_be_filtered_to_one_patient()
+    {
+        // The patient screen uses this to find the consultation it dropped out of.
+        var consultations = new FakeStreamConsultationService();
+        consultations.Seed("mine", ConsultationStatus.Accepted, Triage, patientId: Patient);
+        consultations.Seed("theirs", ConsultationStatus.Accepted, Triage, patientId: "patient-999");
+        using var client = CreateClient(consultations);
+
+        var response = await client.GetAsync(
+            $"/api/consultations?status=accepted&patientId={Patient}", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ConsultationResponse[]>(TestContext.Current.CancellationToken);
+        Assert.Equal("mine", Assert.Single(body!).CallId);
+
+        // The filter must reach Stream, not be applied after fetching everyone's consultations.
+        Assert.Equal([("accepted", Patient)], consultations.Queries);
     }
 
     [Fact]
@@ -231,7 +282,9 @@ public sealed class ConsultationEndpointTests
             "/api/consultations/c1/cancel", new { patientId = Patient }, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal([("c1", ConsultationStatus.Cancelled)], consultations.Closed);
+        Assert.Equal(
+            [("c1", ConsultationStatus.Cancelled, ConsultationEndReason.PatientCancelled)],
+            consultations.Closed);
     }
 
     [Fact]
@@ -267,7 +320,7 @@ public sealed class ConsultationEndpointTests
     [InlineData(Doctor)]  // the invited doctor, after triage has left
     public async Task Staff_on_the_consultation_can_complete_it(string staffId)
     {
-        var consultations = new FakeStreamConsultationService();
+        var consultations = new FakeStreamConsultationService { PatientPresent = true };
         consultations.Seed("c1", ConsultationStatus.Accepted, Triage, members: [Patient, Triage, Doctor]);
         using var client = CreateClient(consultations);
 
@@ -275,7 +328,45 @@ public sealed class ConsultationEndpointTests
             "/api/consultations/c1/complete", new { staffId }, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal([("c1", ConsultationStatus.Completed)], consultations.Closed);
+        Assert.Equal([("c1", ConsultationStatus.Completed, ConsultationEndReason.Finished)], consultations.Closed);
+    }
+
+    [Theory]
+    [InlineData(true, ConsultationEndReason.Finished)]
+    [InlineData(false, ConsultationEndReason.PatientLeft)]
+    public async Task Completing_records_whether_the_patient_was_still_there(
+        bool patientPresent, string expectedReason)
+    {
+        // "Completed" alone can't tell a finished consultation from one where the patient dropped
+        // and staff closed it. The reason comes from Stream's session, not from the browser.
+        var consultations = new FakeStreamConsultationService { PatientPresent = patientPresent };
+        consultations.Seed("c1", ConsultationStatus.Accepted, Triage, members: [Patient, Triage]);
+        using var client = CreateClient(consultations);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/consultations/c1/complete", new { staffId = Triage }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal([("c1", ConsultationStatus.Completed, expectedReason)], consultations.Closed);
+
+        var body = await response.Content.ReadFromJsonAsync<ConsultationResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal(expectedReason, body!.EndReason);
+    }
+
+    [Fact]
+    public async Task Cancelling_records_that_the_patient_gave_up()
+    {
+        var consultations = new FakeStreamConsultationService();
+        consultations.Seed("c1", ConsultationStatus.Waiting);
+        using var client = CreateClient(consultations);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/consultations/c1/cancel", new { patientId = Patient }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(
+            [("c1", ConsultationStatus.Cancelled, ConsultationEndReason.PatientCancelled)],
+            consultations.Closed);
     }
 
     [Fact]
@@ -318,7 +409,7 @@ public sealed class ConsultationEndpointTests
     }
 
     [Theory]
-    [InlineData("/api/consultations", """{ "patientId": "bad id!" }""")]
+    [InlineData("/api/consultations", """{ "patientId": "bad id!", "modality": "video" }""")]
     [InlineData("/api/consultations/c1/accept", """{ "staffId": "" }""")]
     [InlineData("/api/consultations/c1/invite", """{}""")]
     public async Task Invalid_input_returns_400(string url, string json)

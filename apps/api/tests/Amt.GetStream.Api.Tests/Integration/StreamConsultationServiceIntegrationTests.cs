@@ -41,7 +41,7 @@ public sealed class StreamConsultationServiceIntegrationTests : IAsyncLifetime
         var cancellationToken = TestContext.Current.CancellationToken;
         var patient = await CreateUserAsync("patient");
 
-        var consultation = await CreateConsultationAsync(patient, "sore throat");
+        var consultation = await CreateConsultationAsync(patient, "sore throat", ConsultationModality.Audio);
 
         // A plain call must not leak onto the dispatch board; without this, a filter matching
         // everything would still look like it worked.
@@ -54,14 +54,25 @@ public sealed class StreamConsultationServiceIntegrationTests : IAsyncLifetime
 
         await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
 
-        var board = await Consultations.QueryByStatusAsync(CallType, ConsultationStatus.Waiting, 100, cancellationToken);
+        var board = await Consultations.QueryByStatusAsync(
+            CallType, ConsultationStatus.Waiting, patientId: null, 100, cancellationToken);
 
         Assert.Contains(board, found => found.CallId == consultation.CallId);
         Assert.DoesNotContain(board, found => found.CallId == plainCallId);
 
+        // A patient who dropped has to be able to find their own consultation and nobody else's.
+        var mine2 = await Consultations.QueryByStatusAsync(
+            CallType, ConsultationStatus.Waiting, patient, 100, cancellationToken);
+        Assert.All(mine2, found => Assert.Equal(patient, found.PatientId));
+        Assert.Contains(mine2, found => found.CallId == consultation.CallId);
+
         var mine = board.Single(found => found.CallId == consultation.CallId);
         Assert.Equal(patient, mine.PatientId);
         Assert.Equal("sore throat", mine.Reason);
+        // Triage decides how to join from this, so it has to survive the round trip through Stream.
+        Assert.Equal(ConsultationModality.Audio, mine.Modality);
+        // The board shows the name, never the raw id.
+        Assert.Equal("Daniel Okafor", mine.PatientName);
     }
 
     [Fact]
@@ -89,9 +100,20 @@ public sealed class StreamConsultationServiceIntegrationTests : IAsyncLifetime
         // Stream accepting the ring is all this can prove; a browser ringing needs the web app.
         await Consultations.RingAsync(CallType, consultation.CallId, doctor, cancellationToken);
 
+        // Nobody joined the call in this test, so Stream reports no session participants —
+        // which is exactly the "patient wasn't there when it was closed" case.
+        var patientPresent = await Consultations.IsParticipantPresentAsync(
+            CallType, consultation.CallId, patient, cancellationToken);
+        Assert.False(patientPresent);
+
         var completed = await Consultations.CloseAsync(
-            CallType, consultation.CallId, ConsultationStatus.Completed, cancellationToken);
+            CallType,
+            consultation.CallId,
+            ConsultationStatus.Completed,
+            ConsultationEndReason.PatientLeft,
+            cancellationToken);
         Assert.Equal(ConsultationStatus.Completed, completed.Status);
+        Assert.Equal(ConsultationEndReason.PatientLeft, completed.EndReason);
         Assert.NotNull(completed.EndedAt);
     }
 
@@ -105,9 +127,14 @@ public sealed class StreamConsultationServiceIntegrationTests : IAsyncLifetime
         var consultation = await CreateConsultationAsync(patient, "gave up waiting");
 
         var cancelled = await Consultations.CloseAsync(
-            CallType, consultation.CallId, ConsultationStatus.Cancelled, cancellationToken);
+            CallType,
+            consultation.CallId,
+            ConsultationStatus.Cancelled,
+            ConsultationEndReason.PatientCancelled,
+            cancellationToken);
 
         Assert.Equal(ConsultationStatus.Cancelled, cancelled.Status);
+        Assert.Equal(ConsultationEndReason.PatientCancelled, cancelled.EndReason);
         Assert.NotNull(cancelled.EndedAt);
 
         var reread = await Consultations.GetAsync(CallType, consultation.CallId, cancellationToken);
@@ -167,11 +194,20 @@ public sealed class StreamConsultationServiceIntegrationTests : IAsyncLifetime
         return userId;
     }
 
-    private async Task<Consultation> CreateConsultationAsync(string patientId, string reason)
+    private async Task<Consultation> CreateConsultationAsync(
+        string patientId,
+        string reason,
+        string modality = ConsultationModality.Video)
     {
         var callId = TrackCall($"it-consult-{Guid.NewGuid():N}");
         return await Consultations.CreateAsync(
-            CallType, callId, patientId, reason, TestContext.Current.CancellationToken);
+            CallType,
+            callId,
+            patientId,
+            "Daniel Okafor",
+            modality,
+            reason,
+            TestContext.Current.CancellationToken);
     }
 
     private string TrackCall(string callId)

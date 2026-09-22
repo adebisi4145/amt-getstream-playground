@@ -97,7 +97,9 @@ devtunnel host -p 5056 --allow-anonymous   # or: ngrok http 5056
 
 The workflow this playground exists for: a patient taps **Call now**, a triage agent picks it up from a board, and triage can pull a doctor into the live call.
 
-**A consultation is a Stream call** whose custom data carries the queue state: `kind`, `status`, `patientId`, `reason`, `assignedTo`, `requestedAt`, `acceptedAt`. There's no database.
+**A consultation is a Stream call** whose custom data carries the queue state: `kind`, `status`, `patientId`, `modality`, `reason`, `assignedTo`, `requestedAt`, `acceptedAt`. There's no database.
+
+**`modality` is `audio` or `video`**, chosen by the patient when they start the call and required on `POST /api/consultations`. It's stored server-side rather than kept in the browser so triage can see, from the board alone, whether the patient expects video before deciding how to join.
 
 | Step | Endpoint | What happens |
 | --- | --- | --- |

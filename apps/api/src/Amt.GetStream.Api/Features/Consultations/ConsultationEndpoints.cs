@@ -27,6 +27,9 @@ public static class ConsultationEndpoints
         consultations.MapGet("/", BoardAsync)
             .WithName("ListConsultations")
             .WithSummary("Dispatch board: consultations by status, waiting by default")
+            .WithDescription(
+                "Pass patientId to get only that patient's consultations — how a patient who dropped " +
+                "finds the one they were in.")
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status502BadGateway);
 
@@ -96,12 +99,14 @@ public static class ConsultationEndpoints
         var patientId = request.PatientId!;
 
         // The patient may be brand new, and Stream needs the user before they can join.
-        await users.EnsureUserAsync(patientId, name: null, image: null, cancellationToken);
+        await users.EnsureUserAsync(patientId, request.PatientName, image: null, cancellationToken);
 
         var consultation = await consultations.CreateAsync(
             options.Value.CallType,
             Guid.NewGuid().ToString("N"),
             patientId,
+            request.PatientName,
+            request.Modality!,
             request.Reason,
             cancellationToken);
 
@@ -113,6 +118,7 @@ public static class ConsultationEndpoints
         IOptions<ConsultationOptions> options,
         CancellationToken cancellationToken,
         string status = ConsultationStatus.Waiting,
+        string? patientId = null,
         int limit = 25)
     {
         string[] allowed =
@@ -128,7 +134,13 @@ public static class ConsultationEndpoints
             return Invalid("limit", "The limit field must be between 1 and 100.");
         }
 
-        var found = await consultations.QueryByStatusAsync(options.Value.CallType, status, limit, cancellationToken);
+        if (patientId is not null && !StreamId.IsValid(patientId))
+        {
+            return Invalid("patientId", StreamId.Message);
+        }
+
+        var found = await consultations.QueryByStatusAsync(
+            options.Value.CallType, status, patientId, limit, cancellationToken);
 
         IReadOnlyList<ConsultationResponse> response = [.. found.Select(ToResponse)];
 
@@ -290,8 +302,17 @@ public static class ConsultationEndpoints
             return StatusConflict(consultation, "completed");
         }
 
+        // Ask Stream who is still in the session rather than trusting the browser: a consultation
+        // closed with the patient gone is not the same as one that ran to the end.
+        var patientPresent = await consultations.IsParticipantPresentAsync(
+            options.Value.CallType, callId, consultation.PatientId, cancellationToken);
+
         var completed = await consultations.CloseAsync(
-            options.Value.CallType, callId, ConsultationStatus.Completed, cancellationToken);
+            options.Value.CallType,
+            callId,
+            ConsultationStatus.Completed,
+            patientPresent ? ConsultationEndReason.Finished : ConsultationEndReason.PatientLeft,
+            cancellationToken);
 
         return TypedResults.Ok(ToResponse(completed));
     }
@@ -323,7 +344,11 @@ public static class ConsultationEndpoints
         }
 
         var cancelled = await consultations.CloseAsync(
-            options.Value.CallType, callId, ConsultationStatus.Cancelled, cancellationToken);
+            options.Value.CallType,
+            callId,
+            ConsultationStatus.Cancelled,
+            ConsultationEndReason.PatientCancelled,
+            cancellationToken);
 
         return TypedResults.Ok(ToResponse(cancelled));
     }
@@ -346,8 +371,11 @@ public static class ConsultationEndpoints
             consultation.CallId,
             consultation.Cid,
             consultation.PatientId,
+            consultation.PatientName,
+            consultation.Modality,
             consultation.Reason,
             consultation.Status,
+            consultation.EndReason,
             consultation.AssignedTo,
             consultation.RequestedAt,
             consultation.AcceptedAt,

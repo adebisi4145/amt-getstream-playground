@@ -76,6 +76,7 @@ Content-Type: application/json
 
 {
   "patientId": "patient-001",
+  "modality": "video",
   "reason": "sore throat for three days"
 }
 
