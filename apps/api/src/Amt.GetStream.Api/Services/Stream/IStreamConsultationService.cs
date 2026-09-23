@@ -46,6 +46,17 @@ public interface IStreamConsultationService
     /// <summary>Rings a doctor who is already a member. Success means Stream accepted it, not that a browser rang.</summary>
     Task RingAsync(string callType, string callId, string doctorId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Changes the consultation's modality. Custom writes merge, so status, patient and the rest are untouched.
+    /// Updating the call also reaches every joined client as a call.updated event, which is how both sides
+    /// switch between audio and video mid-consultation.
+    /// </summary>
+    Task<Consultation> SetModalityAsync(
+        string callType,
+        string callId,
+        string modality,
+        CancellationToken cancellationToken);
+
     /// <summary>Writes the final status and reason, then ends the Stream call.</summary>
     Task<Consultation> CloseAsync(
         string callType,

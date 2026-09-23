@@ -7,6 +7,8 @@ import {
   MdMic,
   MdMicOff,
   MdMoreHoriz,
+  MdVideocam,
+  MdVideocamOff,
   MdVolumeOff,
   MdVolumeUp,
 } from "react-icons/md";
@@ -54,6 +56,10 @@ export interface CallControlsProps {
   canRecord: boolean;
   speakerMuted: boolean;
   onToggleSpeaker: () => void;
+  cameraEnabled: boolean;
+  onToggleCamera: () => void;
+  /** False on an audio consultation: the camera stays off until staff switch it to video. */
+  canUseCamera: boolean;
 }
 
 export function CallControls({
@@ -65,6 +71,9 @@ export function CallControls({
   canRecord,
   speakerMuted,
   onToggleSpeaker,
+  cameraEnabled,
+  onToggleCamera,
+  canUseCamera,
 }: CallControlsProps) {
   return (
     <div className="flex flex-wrap items-start justify-center gap-7">
@@ -73,6 +82,16 @@ export function CallControls({
         icon={micEnabled ? <MdMic /> : <MdMicOff />}
         onClick={onToggleMic}
         active={!micEnabled}
+      />
+      {/* Present on an audio consultation too, but disabled: seeing why the camera can't be turned
+          on beats wondering where the button went. */}
+      <ControlButton
+        label="camera"
+        icon={cameraEnabled ? <MdVideocam /> : <MdVideocamOff />}
+        onClick={onToggleCamera}
+        disabled={!canUseCamera}
+        active={cameraEnabled}
+        title={canUseCamera ? undefined : "This is an audio consultation"}
       />
       <ControlButton
         label="record"

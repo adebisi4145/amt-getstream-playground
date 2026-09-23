@@ -93,6 +93,32 @@ Content-Type: application/json
   "staffId": "triage-001"
 }
 
+### Triage rejoins after leaving (same agent: returns it unchanged; another agent gets 409)
+POST {{Amt.GetStream.Api_HostAddress}}/api/consultations/{{consultationId}}/accept
+Content-Type: application/json
+
+{
+  "staffId": "triage-001"
+}
+
+### Turn video on mid-consultation (staff on the call only; the patient's camera stays off)
+POST {{Amt.GetStream.Api_HostAddress}}/api/consultations/{{consultationId}}/modality
+Content-Type: application/json
+
+{
+  "staffId": "triage-001",
+  "modality": "video"
+}
+
+### Go back to audio (closes every camera in the call)
+POST {{Amt.GetStream.Api_HostAddress}}/api/consultations/{{consultationId}}/modality
+Content-Type: application/json
+
+{
+  "staffId": "triage-001",
+  "modality": "audio"
+}
+
 ### Bring a doctor into the live call (adds them, then rings them)
 POST {{Amt.GetStream.Api_HostAddress}}/api/consultations/{{consultationId}}/invite
 Content-Type: application/json

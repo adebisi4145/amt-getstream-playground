@@ -99,7 +99,7 @@ The workflow this playground exists for: a patient taps **Call now**, a triage a
 
 **A consultation is a Stream call** whose custom data carries the queue state: `kind`, `status`, `patientId`, `modality`, `reason`, `assignedTo`, `requestedAt`, `acceptedAt`. There's no database.
 
-**`modality` is `audio` or `video`**, chosen by the patient when they start the call and required on `POST /api/consultations`. It's stored server-side rather than kept in the browser so triage can see, from the board alone, whether the patient expects video before deciding how to join.
+**`modality` is `audio` or `video`**, chosen by the patient when they start the call and required on `POST /api/consultations`. It's stored server-side rather than kept in the browser so triage can see, from the board alone, whether the patient expects video before deciding how to join. Staff on the call can change it while the consultation runs — see [Switching between audio and video](#switching-between-audio-and-video).
 
 | Step | Endpoint | What happens |
 | --- | --- | --- |
@@ -108,6 +108,7 @@ The workflow this playground exists for: a patient taps **Call now**, a triage a
 | Triage picks up | `POST /api/consultations/{callId}/accept` | Adds the agent to the call, `status: accepted`. Their browser joins. |
 | Bring in a doctor | `POST /api/consultations/{callId}/invite` | Adds the doctor as a member, then rings them. Triage stays with the patient. |
 | Ring again | `POST /api/consultations/{callId}/ring` | Rings an already-invited doctor again, for when the first ring wasn't answered. |
+| Switch modality | `POST /api/consultations/{callId}/modality` | Staff turn video on, or go back to audio, part-way through. |
 | Finish | `POST /api/consultations/{callId}/complete` | `status: completed`, call ended. |
 | Patient gives up | `POST /api/consultations/{callId}/cancel` | `status: cancelled`, call ended. |
 
@@ -123,6 +124,7 @@ The workflow this playground exists for: a patient taps **Call now**, a triage a
 | Only a configured **doctor** can be invited | Invitations are for clinicians. |
 | `/ring` only rings a doctor **already invited to that consultation** | Otherwise it becomes a way to ring any doctor about a call they aren't part of. |
 | Only **staff on that consultation** can complete it | Triage often leaves after handing over, so the doctor must be able to close it. |
+| Only **staff on that consultation** can change its modality | Asking to see something is a clinical decision. The patient still chooses whether to turn their own camera on. |
 | Only the **owning patient** can cancel | One patient must not be able to cancel another's consultation. |
 
 Anything else returns `403`.
@@ -130,6 +132,24 @@ Anything else returns `403`.
 **Two limits worth knowing**
 - **Identity is faked.** Staff are a list in configuration (`Consultations:Staff`), and the API believes whatever id the request sends. The rules are real; the identity is not. Real authentication has to come before this shape is used for anything.
 - **Accept has a race.** Checking the status and writing it are two calls to Stream, and Stream has no compare-and-set, so two agents accepting in the same instant can both succeed, with the second overwriting `assignedTo`. The `409` covers the everyday case ("someone already took it"), not the millisecond one. In the product, a database row or a lock closes it.
+
+### Switching between audio and video
+
+A consultation that began as audio often needs video part-way through: the patient describes a rash, and the clinician needs to look at it. `POST /api/consultations/{callId}/modality` with `{ "staffId": "triage-001", "modality": "video" }` switches it, and returns the updated consultation.
+
+- **Staff on the call only**, and only while the consultation is `accepted`. Before that the modality is the patient's choice; after it ends the record shouldn't move. Asking for the modality it already has succeeds and changes nothing.
+- **Both screens follow, without polling.** The modality lives in the call's custom data, so changing it makes Stream send `call.updated` to everyone in the call, and each client re-reads `custom.modality`. The web app reads it with `useCallCustomData()`.
+- **Nobody's camera is turned on for them.** The clinician who asks for video enables their own camera; the patient's stays off until they choose. Switching back to audio does close every camera, because an audio consultation means cameras off.
+- **The record moves with it.** `modality` is the consultation's current modality, not the one it started in, so the board and history show what it became. If you need "started as audio, escalated at 14:03", that's another custom field.
+
+### Rejoining
+
+There's no separate rejoin endpoint, for either side.
+
+- **Triage** rejoins with `POST /api/consultations/{callId}/accept`. Accepting a consultation already assigned to you returns it unchanged, so the same call covers "take this" and "let me back in". Another agent's consultation still answers `409`, so a rejoin can't take one over by accident.
+- **The patient** finds their consultation again with `GET /api/consultations?status=accepted&patientId=...`, filtered in Stream so one patient never receives another's.
+
+Both rely on leaving a call not ending it: only `/complete`, `/cancel` and the stale sweeper end the Stream call.
 
 **Recordings are deliberately not part of this.** A recorded consultation is patient data with consent and retention rules attached, and that deserves its own decision.
 

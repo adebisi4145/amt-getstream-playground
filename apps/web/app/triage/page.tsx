@@ -5,6 +5,7 @@ import Link from "next/link";
 import { StreamCall, StreamTheme, StreamVideo, type Call } from "@stream-io/video-react-sdk";
 import "@stream-io/video-react-sdk/dist/css/styles.css";
 import { CallScreen } from "@/components/CallScreen";
+import { ModalityToggle } from "@/components/ModalityToggle";
 import { PillButton } from "@/components/PillButton";
 import { api, ApiError, type Consultation, type ConsultationStatus } from "@/lib/api";
 import { DOCTORS, TRIAGE_AGENTS, displayName, type DemoUser } from "@/lib/demo-users";
@@ -74,7 +75,14 @@ export default function TriagePage() {
     };
   }, [call, tab]);
 
-  const accept = async (waitingConsultation: Consultation) => {
+  /**
+   * Takes a waiting consultation, or goes back into one this agent already has.
+   *
+   * Both are the same request: /accept returns the consultation unchanged for the agent it's
+   * already assigned to, so leaving and coming back needs no separate endpoint — and a rejoin
+   * still can't step on another agent's consultation, which comes back as 409.
+   */
+  const joinConsultation = async (target: Consultation) => {
     if (!client) {
       return;
     }
@@ -82,11 +90,12 @@ export default function TriagePage() {
     setMessage(null);
 
     try {
-      const accepted = await api.accept(waitingConsultation.callId, agent.id);
+      const accepted = await api.accept(target.callId, agent.id);
       const joined = client.call(accepted.callType, accepted.callId);
 
       // The patient chose the modality for the whole consultation, not just for themselves:
-      // answering an audio call on video would put them on the spot.
+      // answering an audio call on video would put them on the spot. On a rejoin this is the
+      // modality as it stands now, which staff may have switched while this agent was away.
       if (accepted.modality === "audio") {
         await joined.camera.disable(true);
       }
@@ -102,7 +111,9 @@ export default function TriagePage() {
       setCall(joined);
     } catch (failure) {
       // 409 here is ordinary: someone else took it a moment ago.
-      setMessage(failure instanceof ApiError ? failure.message : "Could not accept that consultation.");
+      setMessage(
+        failure instanceof ApiError ? failure.message : "Could not open that consultation.",
+      );
     }
   };
 
@@ -246,16 +257,24 @@ export default function TriagePage() {
 
                 {tab === "waiting" && (
                   // Accepting joins the Stream call, so it waits for the client.
-                  <PillButton onClick={() => void accept(item)} disabled={!client}>
+                  <PillButton onClick={() => void joinConsultation(item)} disabled={!client}>
                     {client ? "Accept" : "Preparing…"}
                   </PillButton>
                 )}
 
-                {tab === "inProgress" && (
-                  <span className="text-sm text-amt-black-300">
-                    with {item.assignedTo ? displayName(item.assignedTo) : "a colleague"}
-                  </span>
-                )}
+                {tab === "inProgress" &&
+                  // Triage hands over to a doctor and drops out, or loses the tab. The consultation
+                  // is still theirs and still running, so there has to be a way back in. Someone
+                  // else's consultation stays a label: taking it over is a different decision.
+                  (item.assignedTo === agent.id ? (
+                    <PillButton onClick={() => void joinConsultation(item)} disabled={!client}>
+                      {client ? "Rejoin" : "Preparing…"}
+                    </PillButton>
+                  ) : (
+                    <span className="text-sm text-amt-black-300">
+                      with {item.assignedTo ? displayName(item.assignedTo) : "a colleague"}
+                    </span>
+                  ))}
 
                 {tab === "history" && <EndTag item={item} />}
               </li>
@@ -286,6 +305,13 @@ export default function TriagePage() {
                 onLeave={() => void leave()}
                 actions={
                   <>
+                    <ModalityToggle
+                      callId={consultation.callId}
+                      staffId={agent.id}
+                      fallback={consultation.modality}
+                      onSwitched={setConsultation}
+                      onError={setMessage}
+                    />
                     {DOCTORS.map((doctor) => (
                       <PillButton
                         key={doctor.id}

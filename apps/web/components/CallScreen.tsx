@@ -16,7 +16,10 @@ import { api, ApiError } from "@/lib/api";
 import type { Modality } from "@/lib/api";
 
 interface CallScreenProps {
-  /** "audio" keeps the camera off on both tiles, as the patient asked for. */
+  /**
+   * The modality this screen was opened with. It's only the starting point: staff can switch a
+   * running consultation, so the live value comes from the call's own custom data.
+   */
   modality: Modality;
   localName: string;
   /** Shown centre-screen until someone else joins. */
@@ -43,6 +46,8 @@ export function CallScreen({
     useLocalParticipant,
     useMicrophoneState,
     useSpeakerState,
+    useCameraState,
+    useCallCustomData,
     useCallSession,
     useCallCallingState,
   } = useCallStateHooks();
@@ -58,7 +63,24 @@ export function CallScreen({
   const localParticipant = useLocalParticipant();
   const { microphone, isMute } = useMicrophoneState();
   const { speaker } = useSpeakerState();
+  const { camera, isMute: cameraOff } = useCameraState();
   const session = useCallSession();
+
+  // Staff can turn video on part-way through a consultation. The modality lives in the call's
+  // custom data, so Stream delivers the change to every screen in the call — including the
+  // patient's — without this page polling the API.
+  const custom = useCallCustomData();
+  const liveModality: Modality =
+    custom?.modality === "audio" || custom?.modality === "video" ? custom.modality : modality;
+
+  // Audio means cameras off for everyone, so switching back to audio closes any camera that's on.
+  // Turning video *on* deliberately doesn't open anyone's camera: whoever asks for video enables
+  // their own, and the other side chooses for themselves.
+  useEffect(() => {
+    if (liveModality === "audio" && !cameraOff) {
+      void camera.disable();
+    }
+  }, [camera, cameraOff, liveModality]);
 
   const [recording, setRecording] = useState(false);
   const [speakerMuted, setSpeakerMuted] = useState(false);
@@ -160,7 +182,7 @@ export function CallScreen({
 
       {/* Picture-in-picture tile for the local user, top right in the design. */}
       <div className="amt-pip-gradient absolute right-6 top-12 flex w-[218px] flex-col items-center justify-center gap-5 rounded-md p-10">
-        {modality === "video" && localParticipant ? (
+        {liveModality === "video" && localParticipant && !cameraOff ? (
           <ParticipantTile participant={localParticipant} />
         ) : (
           <Avatar name={localName} size={70} className="bg-amt-blue-400" />
@@ -175,7 +197,7 @@ export function CallScreen({
                 Stream subscribes to a participant's video because a ParticipantView asks for it.
                 Waiting for remote.videoStream first meant the track was never requested, so the
                 other side's camera never appeared. */}
-            {modality === "video" ? (
+            {liveModality === "video" ? (
               <div className="w-full max-w-md overflow-hidden rounded-md">
                 <ParticipantTile participant={remote} />
               </div>
@@ -225,6 +247,9 @@ export function CallScreen({
         canRecord={canRecord}
         speakerMuted={speakerMuted}
         onToggleSpeaker={toggleSpeaker}
+        cameraEnabled={!cameraOff}
+        onToggleCamera={() => void camera.toggle()}
+        canUseCamera={liveModality === "video"}
       />
 
       {!call && <p className="sr-only">Call not ready</p>}

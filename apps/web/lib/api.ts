@@ -142,6 +142,16 @@ export const api = {
       body: JSON.stringify({ doctorId }),
     }),
 
+  /**
+   * Switches a running consultation between audio and video. Staff on the call only: the change
+   * reaches the patient's screen through the call itself, but never turns their camera on.
+   */
+  setModality: (callId: string, staffId: string, modality: Modality) =>
+    request<Consultation>(`/api/consultations/${callId}/modality`, {
+      method: "POST",
+      body: JSON.stringify({ staffId, modality }),
+    }),
+
   complete: (callId: string, staffId: string) =>
     request<Consultation>(`/api/consultations/${callId}/complete`, {
       method: "POST",

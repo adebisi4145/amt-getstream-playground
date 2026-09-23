@@ -397,6 +397,123 @@ public sealed class ConsultationEndpointTests
         Assert.Empty(consultations.Closed);
     }
 
+    [Theory]
+    [InlineData(Triage)]
+    [InlineData(Doctor)]
+    public async Task Staff_on_the_call_switch_an_audio_consultation_to_video(string staffId)
+    {
+        // The feature this exists for: triage (or the doctor they handed over to) needs to see
+        // something the patient is describing.
+        var consultations = new FakeStreamConsultationService();
+        consultations.Seed("c1", ConsultationStatus.Accepted, Triage, members: [Patient, Triage, Doctor],
+            modality: ConsultationModality.Audio);
+        using var client = CreateClient(consultations);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/consultations/c1/modality",
+            new { staffId, modality = ConsultationModality.Video },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal([("c1", ConsultationModality.Video)], consultations.ModalityChanges);
+
+        var body = await response.Content.ReadFromJsonAsync<ConsultationResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal(ConsultationModality.Video, body!.Modality);
+        Assert.Equal(ConsultationStatus.Accepted, body.Status);
+    }
+
+    [Fact]
+    public async Task Switching_to_the_modality_it_already_has_changes_nothing()
+    {
+        var consultations = new FakeStreamConsultationService();
+        consultations.Seed("c1", ConsultationStatus.Accepted, Triage, modality: ConsultationModality.Video);
+        using var client = CreateClient(consultations);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/consultations/c1/modality",
+            new { staffId = Triage, modality = ConsultationModality.Video },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(consultations.ModalityChanges);
+    }
+
+    [Fact]
+    public async Task The_patient_cannot_switch_the_consultation_to_video()
+    {
+        // Whether the patient shows their face stays the patient's choice: they turn their own
+        // camera on. Asking for video is a clinical decision, so it's staff only.
+        var consultations = new FakeStreamConsultationService();
+        consultations.Seed("c1", ConsultationStatus.Accepted, Triage, modality: ConsultationModality.Audio);
+        using var client = CreateClient(consultations);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/consultations/c1/modality",
+            new { staffId = Patient, modality = ConsultationModality.Video },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Empty(consultations.ModalityChanges);
+    }
+
+    [Fact]
+    public async Task Staff_who_are_not_on_the_consultation_cannot_switch_its_modality()
+    {
+        var consultations = new FakeStreamConsultationService();
+        consultations.Seed("c1", ConsultationStatus.Accepted, Triage, members: [Patient, Triage],
+            modality: ConsultationModality.Audio);
+        using var client = CreateClient(consultations);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/consultations/c1/modality",
+            new { staffId = OtherTriage, modality = ConsultationModality.Video },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Empty(consultations.ModalityChanges);
+    }
+
+    [Theory]
+    [InlineData(ConsultationStatus.Waiting)]
+    [InlineData(ConsultationStatus.Completed)]
+    public async Task Only_a_running_consultation_can_change_modality(string status)
+    {
+        var consultations = new FakeStreamConsultationService();
+        consultations.Seed("c1", status, Triage, members: [Patient, Triage], modality: ConsultationModality.Audio);
+        using var client = CreateClient(consultations);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/consultations/c1/modality",
+            new { staffId = Triage, modality = ConsultationModality.Video },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(consultations.ModalityChanges);
+    }
+
+    [Fact]
+    public async Task Triage_rejoining_its_own_consultation_gets_it_back_unchanged()
+    {
+        // Rejoining after leaving goes through /accept: the board has no separate rejoin call,
+        // and re-accepting your own consultation must not look like a second agent taking it.
+        var consultations = new FakeStreamConsultationService();
+        consultations.Seed("c1", ConsultationStatus.Accepted, Triage, members: [Patient, Triage],
+            modality: ConsultationModality.Audio);
+        using var client = CreateClient(consultations);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/consultations/c1/accept", new { staffId = Triage }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(consultations.Assigned);
+
+        var body = await response.Content.ReadFromJsonAsync<ConsultationResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal(Triage, body!.AssignedTo);
+        Assert.Equal(ConsultationStatus.Accepted, body.Status);
+        // The modality may have moved on while they were away; rejoining must use the current one.
+        Assert.Equal(ConsultationModality.Audio, body.Modality);
+    }
+
     [Fact]
     public async Task Unknown_consultation_returns_404()
     {
@@ -412,6 +529,8 @@ public sealed class ConsultationEndpointTests
     [InlineData("/api/consultations", """{ "patientId": "bad id!", "modality": "video" }""")]
     [InlineData("/api/consultations/c1/accept", """{ "staffId": "" }""")]
     [InlineData("/api/consultations/c1/invite", """{}""")]
+    [InlineData("/api/consultations/c1/modality", """{ "staffId": "triage-001" }""")]
+    [InlineData("/api/consultations/c1/modality", """{ "staffId": "triage-001", "modality": "chat" }""")]
     public async Task Invalid_input_returns_400(string url, string json)
     {
         var consultations = new FakeStreamConsultationService();

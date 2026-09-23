@@ -229,6 +229,26 @@ internal sealed class StreamConsultationService(VideoClient video, TimeProvider 
         return response.Data?.Call.Session?.Participants ?? [];
     }
 
+    public async Task<Consultation> SetModalityAsync(
+        string callType,
+        string callId,
+        string modality,
+        CancellationToken cancellationToken)
+    {
+        await UpdateCustomAsync(
+            callType,
+            callId,
+            new Dictionary<string, object> { [ModalityField] = modality },
+            cancellationToken);
+
+        var consultation = await GetAsync(callType, callId, cancellationToken);
+
+        return consultation ?? throw new StreamRequestFailedException(
+            nameof(SetModalityAsync),
+            StatusCodes.Status404NotFound,
+            new InvalidOperationException($"Consultation {callType}:{callId} disappeared after changing modality."));
+    }
+
     public async Task<Consultation> CloseAsync(
         string callType,
         string callId,

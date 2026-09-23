@@ -140,6 +140,21 @@ internal sealed class FakeStreamConsultationService : IStreamConsultationService
         return Task.CompletedTask;
     }
 
+    public List<(string CallId, string Modality)> ModalityChanges { get; } = [];
+
+    public Task<Consultation> SetModalityAsync(
+        string callType,
+        string callId,
+        string modality,
+        CancellationToken cancellationToken)
+    {
+        ModalityChanges.Add((callId, modality));
+        var updated = _consultations[callId] with { Modality = modality };
+
+        _consultations[callId] = updated;
+        return Task.FromResult(updated);
+    }
+
     public Task<Consultation> CloseAsync(
         string callType,
         string callId,

@@ -31,6 +31,19 @@ public sealed class StaffActionRequest
     public string? StaffId { get; init; }
 }
 
+public sealed class ModalityChangeRequest
+{
+    [Required]
+    [StreamId]
+    public string? StaffId { get; init; }
+
+    /// <summary>The modality the consultation should run in from now on: "audio" or "video".</summary>
+    [Required]
+    [RegularExpression($"^({ConsultationModality.Audio}|{ConsultationModality.Video})$",
+        ErrorMessage = "The Modality field must be either 'audio' or 'video'.")]
+    public string? Modality { get; init; }
+}
+
 public sealed class DoctorActionRequest
 {
     [Required]

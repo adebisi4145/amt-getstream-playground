@@ -68,6 +68,19 @@ public static class ConsultationEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status502BadGateway);
 
+        consultations.MapPost("/{callId}/modality", SetModalityAsync)
+            .WithName("SetConsultationModality")
+            .WithSummary("Switch a running consultation between audio and video")
+            .WithDescription(
+                "Staff on the consultation only. Turning video on mid-call is the usual case: triage needs to " +
+                "see something. The change reaches both sides through the call, so the patient's screen switches " +
+                "too, but nobody's camera is turned on for them. Setting the modality it already has changes nothing.")
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status502BadGateway);
+
         consultations.MapPost("/{callId}/complete", CompleteAsync)
             .WithName("CompleteConsultation")
             .WithSummary("Staff on the call finish it")
@@ -268,6 +281,53 @@ public static class ConsultationEndpoints
         await consultations.RingAsync(options.Value.CallType, callId, doctorId, cancellationToken);
 
         return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<Ok<ConsultationResponse>, NotFound, ProblemHttpResult, ValidationProblem>> SetModalityAsync(
+        string callId,
+        ModalityChangeRequest request,
+        IStreamConsultationService consultations,
+        IOptions<ConsultationOptions> options,
+        CancellationToken cancellationToken)
+    {
+        var staffId = request.StaffId!;
+        var modality = request.Modality!;
+        var directory = new StaffDirectory(options.Value);
+
+        // A patient can't switch the consultation to video: the point of the feature is that a
+        // clinician asks to see something, and the patient still chooses whether to show it.
+        if (!directory.IsTriage(staffId) && !directory.IsDoctor(staffId))
+        {
+            return Forbidden($"'{staffId}' is not staff.");
+        }
+
+        var consultation = await consultations.GetAsync(options.Value.CallType, callId, cancellationToken);
+        if (consultation is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!consultation.MemberIds.Contains(staffId))
+        {
+            return Forbidden($"'{staffId}' is not on this consultation.");
+        }
+
+        // Only a running consultation has a modality worth changing: before triage accepts, it's
+        // still the patient's choice, and after it ends the record shouldn't move.
+        if (consultation.Status != ConsultationStatus.Accepted)
+        {
+            return StatusConflict(consultation, "switched to another modality");
+        }
+
+        // Already there — a double click, or two clinicians pressing at once.
+        if (consultation.Modality == modality)
+        {
+            return TypedResults.Ok(ToResponse(consultation));
+        }
+
+        var switched = await consultations.SetModalityAsync(options.Value.CallType, callId, modality, cancellationToken);
+
+        return TypedResults.Ok(ToResponse(switched));
     }
 
     private static async Task<Results<Ok<ConsultationResponse>, NotFound, ProblemHttpResult, ValidationProblem>> CompleteAsync(
