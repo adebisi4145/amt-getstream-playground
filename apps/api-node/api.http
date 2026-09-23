@@ -1,0 +1,65 @@
+@host = http://localhost:5057
+
+### Issue a Stream user token (creates the user if missing; only sent fields are updated)
+POST {{host}}/api/tokens
+Content-Type: application/json
+
+{
+  "userId": "alice",
+  "name": "Alice",
+  "image": "https://getstream.io/random_png/?name=Alice"
+}
+
+### Refresh a token (userId only; leaves the existing user unchanged)
+POST {{host}}/api/tokens
+Content-Type: application/json
+
+{
+  "userId": "alice"
+}
+
+### Invalid request: returns 400 ValidationProblem
+POST {{host}}/api/tokens
+Content-Type: application/json
+
+{
+  "userId": "bad id!",
+  "image": "ftp://example.com/alice.png"
+}
+
+### Ring bob with a video call from alice (bob gets an incoming call if connected)
+POST {{host}}/api/calls
+Content-Type: application/json
+
+{
+  "createdById": "alice",
+  "memberIds": ["bob"],
+  "kind": "video"
+}
+
+### Ring bob with an audio call (camera off by default)
+POST {{host}}/api/calls
+Content-Type: application/json
+
+{
+  "createdById": "alice",
+  "memberIds": ["bob"],
+  "kind": "audio"
+}
+
+### Who can I call?
+GET {{host}}/api/users?limit=20
+
+### Read a call's state (replace the id with one from POST /api/calls)
+GET {{host}}/api/calls/00000000-0000-0000-0000-000000000000
+
+### End a call for everyone
+POST {{host}}/api/calls/00000000-0000-0000-0000-000000000000/end
+
+### Webhook events received since startup (development only)
+GET {{host}}/api/webhooks/recent
+
+### Health
+GET {{host}}/health
+
+###

@@ -6,6 +6,7 @@
   },
   "workspaces": [
     "apps/web",
+    "apps/api-node",
     "packages/*"
   ],
   "scripts": {
@@ -15,6 +16,12 @@
     "dev:api": "dotnet watch --project apps/api/src/Amt.GetStream.Api",
     "build:api": "dotnet build apps/api/Amt.GetStream.Playground.slnx",
     "test:api": "dotnet test --solution apps/api/Amt.GetStream.Playground.slnx",
-    "test:api:integration": "dotnet test --solution apps/api/Amt.GetStream.Playground.slnx --filter-trait \"Category=Integration\""
+    "test:api:integration": "dotnet test --solution apps/api/Amt.GetStream.Playground.slnx --filter-trait \"Category=Integration\"",
+    "dev:api-node": "npm run dev --workspace=apps/api-node",
+    "start:api-node": "npm run start --workspace=apps/api-node",
+    "typecheck:api-node": "npm run typecheck --workspace=apps/api-node",
+    "check:stream": "npm run check:stream --workspace=apps/api-node",
+    "test:api-node": "npm run test --workspace=apps/api-node",
+    "test:api-node:integration": "npm run test:integration --workspace=apps/api-node"
   }
 }

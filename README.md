@@ -1,8 +1,8 @@
 # amt-getstream-playground
 
-A monorepo for experimenting with [GetStream](https://getstream.io/). It has a Next.js web client and an ASP.NET Core API.
+A monorepo for experimenting with [GetStream](https://getstream.io/). It has a Next.js web client, an ASP.NET Core API and a Node.js API.
 
-> **Status:** early. The API issues Stream Video user tokens, manages calls, recordings and webhooks, and runs a consultation queue (patient → triage → doctor). See [docs/api.md](docs/api.md). The web app is still the starter template.
+> **Status:** early. The .NET API issues Stream Video user tokens, manages calls, recordings and webhooks, and runs a consultation queue (patient → triage → doctor). See [docs/api.md](docs/api.md). The Node API issues the same tokens and has what voice and video calls need — ringing calls, reading and ending them, listing users, and a webhook receiver — but not the consultation queue. See [docs/api-node.md](docs/api-node.md). The web app is still the starter template.
 
 ## Repository layout
 
@@ -10,6 +10,10 @@ A monorepo for experimenting with [GetStream](https://getstream.io/). It has a N
 .
 ├── apps/                   # Runnable applications
 │   ├── web/                # Next.js 16 (App Router) client (npm workspace)
+│   ├── api-node/           # Node.js (Fastify) port of the API (npm workspace)
+│   │   ├── src/features/       # Routes, one folder per feature
+│   │   ├── src/services/stream/ # Everything that talks to the Stream SDK
+│   │   └── test/
 │   └── api/                # ASP.NET Core (.NET 10) minimal API
 │       ├── Amt.GetStream.Playground.slnx
 │       ├── src/Amt.GetStream.Api/
@@ -25,12 +29,13 @@ A monorepo for experimenting with [GetStream](https://getstream.io/). It has a N
 | Path | Stack | Tooling |
 | --- | --- | --- |
 | `apps/web` | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4 | npm workspaces, ESLint |
+| `apps/api-node` | Fastify 5, Zod 4, TypeScript 5 (run with `tsx`), `@stream-io/node-sdk` 0.8.6, Scalar API reference | npm workspaces, Vitest |
 | `apps/api` | ASP.NET Core minimal APIs (.NET 10), `getstream-net` 16.0.1, Scalar API reference | `dotnet` CLI, `.slnx` solution, xUnit v3 on Microsoft.Testing.Platform |
 
 ### Conventions
 
 - **`apps/`** holds things you run or deploy. **`packages/`** holds code that apps share.
-- The npm workspace covers `apps/web` and `packages/*`. The API is a separate .NET solution, but you can run it through the root npm scripts too.
+- The npm workspace covers `apps/web`, `apps/api-node` and `packages/*`. The API is a separate .NET solution, but you can run it through the root npm scripts too.
 - All JS dependencies install into the root `node_modules`, and there's a single `package-lock.json` at the root. Run `npm install` from the root, not from inside an app.
 - New .NET projects go under `apps/api/src/` (tests under `apps/api/tests/`) and get added to `Amt.GetStream.Playground.slnx` (`dotnet sln apps/api/Amt.GetStream.Playground.slnx add <path-to-csproj>`).
 - In the API, endpoints live in `Features/<Feature>/` and depend only on service interfaces. Code that uses the Stream SDK stays in `Services/Stream/`.
@@ -57,6 +62,8 @@ Set the Stream API secret before running the API (see [Configuration](#configura
 ```bash
 npm run dev       # web → http://localhost:3000
 npm run dev:api   # api → http://localhost:5056
+# or, instead of the C# API:
+npm run dev:api-node   # node api → http://localhost:5057 (needs apps/api-node/.env, see docs/api-node.md)
 ```
 
 In the `Development` environment, the API serves its OpenAPI document at `/openapi/v1.json` and an API reference UI at http://localhost:5056/scalar. [Amt.GetStream.Api.http](apps/api/src/Amt.GetStream.Api/Amt.GetStream.Api.http) has sample requests you can send from VS Code (REST Client) or Visual Studio.
@@ -111,5 +118,10 @@ Run these from the repo root:
 | `npm run build:api` | Build the API solution |
 | `npm run test:api` | Run the API tests |
 | `npm run test:api:integration` | Run only the Stream integration tests |
+| `npm run dev:api-node` | Run the Node API with reload (`tsx watch`) |
+| `npm run typecheck:api-node` | Type-check the Node API |
+| `npm run check:stream` | Check that the Stream app's `default` call type is set up for calling |
+| `npm run test:api-node` | Run the Node API tests |
+| `npm run test:api-node:integration` | Run only the Node API's Stream integration tests |
 
 To run the API on HTTPS (https://localhost:7177), use `dotnet run --project apps/api/src/Amt.GetStream.Api --launch-profile https`.
