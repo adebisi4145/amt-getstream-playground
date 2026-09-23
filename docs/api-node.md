@@ -54,7 +54,7 @@ Two things sit outside the code and are worth checking once, with `npm run check
   - It creates a call of type `default` whose members are the creator plus `memberIds` (at most 10).
   - Stream rejects members who don't exist, so any missing users are created first, with only their id. Existing users aren't changed.
   - `ring` defaults to `true`. It sends an incoming-call event to members who are connected.
-  - `kind: "audio"` sets `video: false` and turns the camera off by default for that call (`settings_override.video.camera_default_on = false`). It also stores `custom.kind`, so clients can show an audio call UI.
+  - `kind: "audio"` sets `video: false`, which is what ring and push notifications show, and stores `custom.kind`. Keeping the camera off is the client's job, the way `apps/web`'s `CallScreen` does it, and the same way the .NET API treats `modality`.
 - **`GET /api/calls/{callId}`** returns the call's members, `kind`, whether anyone is in it (`live`), `endedAt`, and who accepted, rejected or missed it. It's the server-side view of what happened to a ring.
 - **`POST /api/calls/{callId}/end`** ends the call for everyone and stops it ringing.
 - **`GET /api/users?limit=50`** lists the app's users, newest first, so a client can show who there is to call. Development only: it returns everyone, with no filtering by who is asking.
@@ -125,7 +125,7 @@ const client = StreamVideoClient.getOrCreateInstance({
 - For an outgoing call, `call.leave({ reject: true, reason: "cancel" })` cancels it.
 - The `RingingCall` component gives you a ready-made UI for both.
 
-**Audio compared with video.** Both use the `default` call type. For an audio call, call `call.camera.disable()` before `call.join()`, or rely on `camera_default_on: false` when the call came from `POST /api/calls`, and render participants without video tiles. For a video call, use `SpeakerLayout` or `PaginatedGrid` inside `<StreamCall call={call}>`.
+**Audio compared with video.** Both use the `default` call type, with the same settings. For an audio call, read `custom.kind` (`GET /api/calls/{callId}` returns it as `kind`), call `call.camera.disable()` before `call.join()`, and render participants without video tiles. Because the call's own settings are untouched, either side can still turn the camera on to escalate to video. For a video call, use `SpeakerLayout` or `PaginatedGrid` inside `<StreamCall call={call}>`.
 
 **Things that get in the way.**
 - Browsers only allow camera and microphone access on `https` or `localhost`. To test on a phone, use a tunnel.
@@ -172,4 +172,5 @@ These were checked against the published package. Re-check them when you upgrade
 - **Timeout.** Requests time out after 3 seconds by default (`new StreamClient(key, secret, { timeout })`).
 - **Tokens.** `generateUserToken({ user_id, validity_in_seconds })` sets `iat` 1 second in the past and `exp = iat + validity`. It doesn't set `nbf`. `expiresAt` is read back from the token's `exp` claim.
 - **Calls.** `client.video.call(type, id).getOrCreate({ ring, video, data })` creates the call. `data.members` must reference existing users. The same handle has `get()`, `end()` and `delete({ hard })`.
+- **`settings_override` is all or nothing.** Checked against real Stream on 2026-09-23: sending only `video.camera_default_on` is rejected with `400` ("target_resolution.width must be 240 or greater"), because the whole `video` block is validated. Sending the block in full then silently sets `enabled: false` for any boolean left out, which disables video for the call. So this API doesn't override call settings at all; the kind lives in `custom`.
 - **Webhooks.** `client.verifyAndParseWebhook(rawBody, signature)` checks the HMAC and returns a typed event, handling gzipped bodies. It throws `InvalidWebhookError`, which is exported, unlike `StreamError`.

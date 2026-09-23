@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { StreamClient } from "@stream-io/node-sdk";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/config.ts";
 import { createStreamCallService } from "../../src/services/stream/streamCallService.ts";
 import { StreamRequestFailedError } from "../../src/services/stream/streamRequestFailedError.ts";
@@ -21,23 +21,32 @@ const hasSecret = Boolean(process.env.STREAM_API_SECRET);
 describe.skipIf(!hasSecret)("Stream integration", () => {
   let client: StreamClient;
   let createdUserIds: string[] = [];
+  const callIdsToDelete: string[] = [];
 
   beforeAll(() => {
     const config = loadConfig({ ...process.env, NODE_ENV: "development" });
     client = new StreamClient(config.stream.apiKey, config.stream.apiSecret, { timeout: 15_000 });
   });
 
-  afterEach(async () => {
+  // One batched delete at the end: DeleteUsers is heavily rate limited, and cleanup must never fail a
+  // passing test. Leftovers are harmless it-<uuid> users; delete them in the dashboard if a run is killed.
+  afterAll(async () => {
     if (createdUserIds.length === 0) return;
-    const response = await client.deleteUsers({ user_ids: createdUserIds, user: "hard", calls: "hard" });
-    createdUserIds = [];
 
-    // Deletion runs as a Stream background task.
-    const deadline = Date.now() + 60_000;
-    while (Date.now() < deadline) {
-      const task = await client.getTask({ id: response.task_id });
-      if (task.status === "completed" || task.status === "failed") return;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const response = await client.deleteUsers({ user_ids: createdUserIds, user: "hard", calls: "hard" });
+
+      // Deletion runs as a Stream background task.
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline) {
+        const task = await client.getTask({ id: response.task_id });
+        if (task.status === "completed" || task.status === "failed") return;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    } catch (error) {
+      console.warn(`Could not clean up ${createdUserIds.length} test user(s): ${(error as Error).message}`);
+    } finally {
+      createdUserIds = [];
     }
   });
 
@@ -115,11 +124,11 @@ describe.skipIf(!hasSecret)("Stream integration", () => {
     const call = client.video.call(started.callType, started.callId);
     const { call: details, members } = await call.get();
     expect(details.created_by.id).toBe(caller);
+    // The kind rides in custom data; the call's own video settings are left at the call type's defaults,
+    // so an audio call can still be escalated to video by the client.
     expect(details.custom).toEqual({ kind });
+    expect(details.settings.video.enabled).toBe(true);
     expect(members.map((member) => member.user_id).sort()).toEqual([caller, callee].sort());
-    if (kind === "audio") {
-      expect(details.settings.video.camera_default_on).toBe(false);
-    }
     expect(details.settings.ring.incoming_call_timeout_ms).toBeGreaterThan(0);
 
     await call.delete({ hard: true });

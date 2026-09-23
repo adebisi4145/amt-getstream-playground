@@ -37,7 +37,7 @@ Content-Type: application/json
   "kind": "video"
 }
 
-### Ring bob with an audio call (camera off by default)
+### Ring bob with an audio call (the client keeps the camera off)
 POST {{host}}/api/calls
 Content-Type: application/json
 

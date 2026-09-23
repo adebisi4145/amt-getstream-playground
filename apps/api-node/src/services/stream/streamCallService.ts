@@ -3,7 +3,12 @@ import type { StreamClient } from "@stream-io/node-sdk";
 import { callStream } from "./streamRequestFailedError.ts";
 import type { StreamUserService } from "./streamUserService.ts";
 
-/** Both kinds use Stream's `default` call type, which supports ringing. Audio calls start with the camera off. */
+/**
+ * Both kinds use Stream's `default` call type, which supports ringing. The kind is carried in `custom.kind`,
+ * and clients keep the camera off for audio calls, the way apps/web does. The call's own video settings are
+ * left alone: Stream validates `settings_override.video` as a whole, so a partial override is rejected, and
+ * sending the block wholesale turns `enabled` off and stops a call being escalated to video later.
+ */
 export const CALL_TYPE = "default";
 
 export type CallKind = "video" | "audio";
@@ -72,7 +77,6 @@ export function createStreamCallService(client: StreamClient, users: StreamUserS
             members: allMemberIds.map((user_id) => ({ user_id })),
             video,
             custom: { kind },
-            settings_override: video ? undefined : { video: { camera_default_on: false } },
           },
         }),
       );

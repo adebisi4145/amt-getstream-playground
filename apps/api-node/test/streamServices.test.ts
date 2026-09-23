@@ -27,7 +27,7 @@ describe("Stream services", () => {
     expect((payload.exp as number) - (payload.iat as number)).toBe(lifetime);
   });
 
-  it("startCall creates a call with the creator as a member and an audio call with the camera off", async () => {
+  it("startCall creates a call with the creator as a member and the kind in custom data", async () => {
     const client = new StreamClient(TEST_API_KEY, TEST_API_SECRET);
     const requests: Array<{ type: string; id: string; body: unknown }> = [];
     client.video.getOrCreateCall = async (request) => {
@@ -54,7 +54,6 @@ describe("Stream services", () => {
         members: [{ user_id: "alice" }, { user_id: "bob" }],
         video: false,
         custom: { kind: "audio" },
-        settings_override: { video: { camera_default_on: false } },
       },
     });
   });
