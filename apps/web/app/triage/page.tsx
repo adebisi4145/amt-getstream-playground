@@ -7,9 +7,10 @@ import "@stream-io/video-react-sdk/dist/css/styles.css";
 import { CallScreen } from "@/components/CallScreen";
 import { ModalityToggle } from "@/components/ModalityToggle";
 import { PillButton } from "@/components/PillButton";
-import { api, ApiError, type Consultation, type ConsultationStatus } from "@/lib/api";
+import { api, ApiError, type Consultation, type ConsultationStatus, type Modality } from "@/lib/api";
 import { DOCTORS, TRIAGE_AGENTS, displayName, type DemoUser } from "@/lib/demo-users";
 import { leaveCallQuietly } from "@/lib/leave-call";
+import { switchModality } from "@/lib/switch-modality";
 import { useAlert } from "@/lib/useAlert";
 import { useStreamClient } from "@/lib/useStreamClient";
 import { AlertToggle } from "@/components/AlertToggle";
@@ -144,6 +145,29 @@ export default function TriagePage() {
       setMessage(failure instanceof ApiError ? failure.message : "Could not ring that doctor.");
     }
   };
+
+  /**
+   * Triage asks for video part-way through an audio consultation: the patient is describing
+   * something that has to be seen. Both the camera button and the pill above the controls land here.
+   */
+  const changeModality = useCallback(
+    async (next: Modality) => {
+      if (!call) {
+        return;
+      }
+
+      setMessage(null);
+
+      try {
+        setConsultation(await switchModality(call, agent.id, next));
+      } catch (failure) {
+        setMessage(
+          failure instanceof ApiError ? failure.message : "Could not switch the consultation.",
+        );
+      }
+    },
+    [agent.id, call],
+  );
 
   /**
    * Triage drops out; the call carries on without them.
@@ -303,10 +327,10 @@ export default function TriagePage() {
                 callType={consultation.callType}
                 callId={consultation.callId}
                 onLeave={() => void leave()}
+                onRequestVideo={() => void changeModality("video")}
                 actions={
                   <>
                     <ModalityToggle
-                      callId={consultation.callId}
                       staffId={agent.id}
                       fallback={consultation.modality}
                       onSwitched={setConsultation}

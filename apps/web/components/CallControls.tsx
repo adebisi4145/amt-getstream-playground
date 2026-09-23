@@ -57,9 +57,12 @@ export interface CallControlsProps {
   speakerMuted: boolean;
   onToggleSpeaker: () => void;
   cameraEnabled: boolean;
-  onToggleCamera: () => void;
-  /** False on an audio consultation: the camera stays off until staff switch it to video. */
+  /** Absent when the button is disabled: an audio consultation the viewer can't switch. */
+  onToggleCamera?: () => void;
+  /** False only when the camera can do nothing here — an audio consultation the viewer can't switch. */
   canUseCamera: boolean;
+  /** Why the button is disabled, or what pressing it will do. */
+  cameraTitle?: string;
 }
 
 export function CallControls({
@@ -74,6 +77,7 @@ export function CallControls({
   cameraEnabled,
   onToggleCamera,
   canUseCamera,
+  cameraTitle,
 }: CallControlsProps) {
   return (
     <div className="flex flex-wrap items-start justify-center gap-7">
@@ -83,15 +87,16 @@ export function CallControls({
         onClick={onToggleMic}
         active={!micEnabled}
       />
-      {/* Present on an audio consultation too, but disabled: seeing why the camera can't be turned
-          on beats wondering where the button went. */}
+      {/* On an audio consultation this is how staff ask for video: pressing the camera is the
+          obvious way to turn it on, so it must do that rather than sit there greyed out. It's
+          disabled only for someone who can't change the consultation — the patient. */}
       <ControlButton
         label="camera"
         icon={cameraEnabled ? <MdVideocam /> : <MdVideocamOff />}
         onClick={onToggleCamera}
         disabled={!canUseCamera}
         active={cameraEnabled}
-        title={canUseCamera ? undefined : "This is an audio consultation"}
+        title={cameraTitle}
       />
       <ControlButton
         label="record"

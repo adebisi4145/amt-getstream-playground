@@ -27,6 +27,12 @@ interface CallScreenProps {
   callType: string;
   callId: string;
   onLeave: () => void;
+  /**
+   * Staff only: turns an audio consultation into a video one. Given this, the camera button offers
+   * to start video instead of sitting disabled, because pressing the camera is how anyone expects
+   * to ask for video. Left out (the patient), the camera stays off until staff switch it.
+   */
+  onRequestVideo?: () => void;
   /** Role-specific actions (invite a doctor, complete) rendered above the control bar. */
   actions?: ReactNode;
 }
@@ -38,6 +44,7 @@ export function CallScreen({
   callType,
   callId,
   onLeave,
+  onRequestVideo,
   actions,
 }: CallScreenProps) {
   const call = useCall();
@@ -73,14 +80,19 @@ export function CallScreen({
   const liveModality: Modality =
     custom?.modality === "audio" || custom?.modality === "video" ? custom.modality : modality;
 
-  // Audio means cameras off for everyone, so switching back to audio closes any camera that's on.
-  // Turning video *on* deliberately doesn't open anyone's camera: whoever asks for video enables
-  // their own, and the other side chooses for themselves.
+  // Going back to audio closes every camera in the call. This watches for the *change* rather than
+  // for "audio with a camera on", which would fight the person asking for video: they enable their
+  // camera as they press, and the new modality only reaches this screen a moment later over the
+  // websocket. Joining is already handled by each page, which opens no camera on an audio call.
+  const previousModality = useRef(liveModality);
   useEffect(() => {
-    if (liveModality === "audio" && !cameraOff) {
+    const cameFromVideo = previousModality.current === "video";
+    previousModality.current = liveModality;
+
+    if (liveModality === "audio" && cameFromVideo) {
       void camera.disable();
     }
-  }, [camera, cameraOff, liveModality]);
+  }, [camera, liveModality]);
 
   const [recording, setRecording] = useState(false);
   const [speakerMuted, setSpeakerMuted] = useState(false);
@@ -248,8 +260,15 @@ export function CallScreen({
         speakerMuted={speakerMuted}
         onToggleSpeaker={toggleSpeaker}
         cameraEnabled={!cameraOff}
-        onToggleCamera={() => void camera.toggle()}
-        canUseCamera={liveModality === "video"}
+        onToggleCamera={liveModality === "video" ? () => void camera.toggle() : onRequestVideo}
+        canUseCamera={liveModality === "video" || Boolean(onRequestVideo)}
+        cameraTitle={
+          liveModality === "video"
+            ? undefined
+            : onRequestVideo
+              ? "Start video for this consultation"
+              : "This is an audio consultation"
+        }
       />
 
       {!call && <p className="sr-only">Call not ready</p>}

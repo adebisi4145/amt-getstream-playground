@@ -12,10 +12,12 @@ import {
 } from "@stream-io/video-react-sdk";
 import "@stream-io/video-react-sdk/dist/css/styles.css";
 import { CallScreen } from "@/components/CallScreen";
+import { ModalityToggle } from "@/components/ModalityToggle";
 import { PillButton } from "@/components/PillButton";
 import { api, ApiError, type Modality } from "@/lib/api";
 import { DOCTORS, type DemoUser } from "@/lib/demo-users";
 import { leaveCallQuietly } from "@/lib/leave-call";
+import { switchModality } from "@/lib/switch-modality";
 import { useAlert } from "@/lib/useAlert";
 import { useStreamClient } from "@/lib/useStreamClient";
 import { AlertToggle } from "@/components/AlertToggle";
@@ -87,6 +89,20 @@ function ConnectedDesk({ doctor, onSwitch }: { doctor: DemoUser; onSwitch: (user
     setJoined(call);
   };
 
+  /** The camera button on an audio consultation: ask for video, then show your own face. */
+  const requestVideo = async (call: Call) => {
+    setMessage(null);
+
+    try {
+      const updated = await switchModality(call, doctor.id, "video");
+      setModality(updated.modality);
+    } catch (failure) {
+      setMessage(
+        failure instanceof ApiError ? failure.message : "Could not switch the consultation.",
+      );
+    }
+  };
+
   /**
    * Triage usually hands over and leaves, so the doctor is last in the room and ends the
    * consultation. Leaving (the red button) only drops the doctor out.
@@ -116,10 +132,20 @@ function ConnectedDesk({ doctor, onSwitch }: { doctor: DemoUser; onSwitch: (user
               void leaveCallQuietly(joined);
               setJoined(null);
             }}
+            // The doctor is staff on this consultation too, and is usually the one who needs to see.
+            onRequestVideo={() => void requestVideo(joined)}
             actions={
-              <PillButton variant="white" onClick={() => void complete(joined)}>
-                Complete consultation
-              </PillButton>
+              <>
+                <ModalityToggle
+                  staffId={doctor.id}
+                  fallback={modality}
+                  onSwitched={(consultation) => setModality(consultation.modality)}
+                  onError={setMessage}
+                />
+                <PillButton variant="white" onClick={() => void complete(joined)}>
+                  Complete consultation
+                </PillButton>
+              </>
             }
           />
         </main>
